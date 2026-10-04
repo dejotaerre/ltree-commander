@@ -1,0 +1,20 @@
+#pragma once
+#include "core/session.h"
+#include "fs/mounts.h"
+
+namespace ltree {
+struct SystemStatistics {
+    QString path, mount, source, filesystem, error, cpuType, host, user, sessionType, desktop;
+    qint64 capacity=-1, available=-1, free=-1, blockSize=-1, totalBlocks=-1;
+    qint64 ramTotal=-1, ramAvailable=-1, committed=-1, commitLimit=-1;
+    double cpuMHz=-1;
+    QDateTime measured;
+};
+struct LoggedStatistics {
+    quint64 totalFiles=0, totalBytes=0, matchingFiles=0, matchingBytes=0, taggedFiles=0, taggedBytes=0;
+    quint64 directories=0, displayedFiles=0, displayedBytes=0;
+};
+SystemStatistics parseProcStatistics(const QByteArray &memory, const QByteArray &cpu);
+SystemStatistics systemStatistics(const QString &path);
+LoggedStatistics loggedStatistics(const Session &, const QVector<MountPoint> &mounts={}, const QString &mount={});
+}

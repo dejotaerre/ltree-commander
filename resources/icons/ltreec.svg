@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>LTree Commander</title>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#184ba9"/>
+      <stop offset="1" stop-color="#08134e"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="100" fill="url(#background)"/>
+  <rect x="64" y="72" width="384" height="368" rx="36" fill="#07076e" stroke="#58d9ed" stroke-width="8"/>
+  <path d="M68 136h376" stroke="#58d9ed" stroke-width="8"/>
+  <circle cx="102" cy="104" r="10" fill="#ffdf58"/>
+  <circle cx="138" cy="104" r="10" fill="#58d9ed"/>
+  <circle cx="174" cy="104" r="10" fill="#58d9ed"/>
+  <path d="M172 216h164M172 280h112" fill="none" stroke="#58d9ed" stroke-width="20" stroke-linejoin="round"/>
+  <path d="M172 184v172h164" fill="none" stroke="#ffdf58" stroke-width="32" stroke-linecap="square" stroke-linejoin="round"/>
+  <rect x="320" y="194" width="44" height="44" rx="8" fill="#58d9ed"/>
+  <rect x="268" y="258" width="44" height="44" rx="8" fill="#58d9ed"/>
+  <rect x="320" y="334" width="44" height="44" rx="8" fill="#ffdf58"/>
+</svg>

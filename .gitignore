@@ -1,0 +1,26 @@
+/build*/
+/referencias/
+/tests/datos-demo/
+/docs/capturas-pruebas/
+
+# La fuente se genera desde kbd local; no se redistribuyen sus datos derivados.
+resources/*.ttf
+dist/
+
+# Las reglas locales remiten a archivos personales de la máquina de desarrollo.
+/AGENTS.md
+
+# Inventarios extraídos de referencias privadas; se conservan solo para desarrollo local.
+/docs/INDICE_MANUAL.md
+/docs/COMANDOS.md
+/docs/CONFIGURACION.md
+/docs/comandos.json
+/docs/configuracion.json
+/docs/ARQUITECTURA.md
+/docs/COMPATIBILIDAD.md
+/docs/VALIDACION_Y_ETAPAS.md
+
+# Archivos locales de editores y entornos.
+*.user
+__pycache__/
+*.pyc

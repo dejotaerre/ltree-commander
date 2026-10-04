@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LTree Commander
+Comment=Browse, search and manage files with a classic tree interface
+Exec=ltc
+TryExec=ltc
+Icon=ltreec
+Terminal=false
+Categories=System;FileTools;FileManager;
+Keywords=files;folders;tree;commander;
+StartupNotify=true
+StartupWMClass=ltc
