@@ -112,13 +112,13 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
         refresh();
     });
     connect(&clock_, &QTimer::timeout, this, [this] {
-        clock_.start(60000 - QTime::currentTime().msecsSinceStartOfDay() % 60000);
+        clock_.start(1000 - QTime::currentTime().msec());
         const QDate today = QDate::currentDate();
         if (filterDate_ != today && !busy()) {
             filterDate_ = today;
             if (session_.filespec.usesToday()) { session_.rebuild(); refresh(); return; }
         }
-        update();
+        update(0, 0, width(), cellHeight_);
     });
     connect(&makeWatcher_,&QFutureWatcher<MakeDirectoryResult>::finished,this,[this]{
         const auto result=makeWatcher_.result();busy_=false;
@@ -198,7 +198,7 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
         searchNext();
     });
     clock_.setSingleShot(true);
-    clock_.start(60000 - QTime::currentTime().msecsSinceStartOfDay() % 60000);
+    clock_.start(1000 - QTime::currentTime().msec());
     load(false, true);
 }
 
@@ -673,8 +673,8 @@ void TreeWindow::drawPane(QPainter &p)
     QString path = session_.directory;
     if (session_.view != View::Tree && session_.currentFile()) path = QFileInfo(session_.currentFile()->path).absolutePath();
     drawText(p, 0, 0, session_.hasCompareFilter()?"#":session_.tagsOnly ? "♦" : session_.filespec.text() != "*.*" || session_.filespec.inverted ? "-" : " ", cyan, 1);
-    drawText(p, 1, 0, path, cyan, layoutColumns() - (isSplit() ? 1 : 20));
-    if (!isSplit()) drawText(p, layoutColumns() - 18, 0, QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"), cyan);
+    drawText(p, 1, 0, path, cyan, layoutColumns() - (isSplit() ? 1 : 23));
+    if (!isSplit()) drawText(p, layoutColumns() - 21, 0, QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"), cyan);
     horizontal(p, 1, 0, layoutColumns() - 1);
     horizontal(p, end, 0, layoutColumns() - 1);
     for (const auto &edge : {std::pair{0, QString("┌└")}, std::pair{right, QString("┬┴")},

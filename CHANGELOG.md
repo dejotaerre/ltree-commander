@@ -4,6 +4,14 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Paired branch-size markers — 2026-10-04
+
+- The optional tree-size column closes complete totals with ] and partial totals with }, keeping its 14-cell width in both panels.
+
+### Graphical clock seconds — 2026-10-04
+
+- The main graphical header displays HH:mm:ss and updates its row each second. The path leaves room for the full timestamp.
+
 ### Remember graphical window geometry — 2026-10-04
 
 - Normal graphical exits save the normal window size and maximized/fullscreen state under ~/.config/ltreec/window.ini, respecting XDG_CONFIG_HOME. The next graphical start restores them; --fullscreen overrides the saved state.

@@ -10,15 +10,15 @@ namespace ltree {
 QString BranchSize::label(int width) const
 {
     if(!logged || (complete && files==0))return {};
-    if(files==0)return "{ ?";
+    if(files==0)return "{ ? }";
     const QLocale locale(QLocale::Spanish,QLocale::Uruguay);
     const QStringList units{"k","M","G","T","P","E"};
     quint64 divisor=1024;
     for(int unit=0;unit<units.size();++unit){
         const auto value=bytes/divisor+(bytes%divisor!=0);
         const QString text=locale.toString(value)+units[unit];
-        if(text.size()<=width-2 || unit==units.size()-1)
-            return QString(complete?'[':'{')+' '+text.rightJustified(width-2);
+        if(text.size()<=width-3 || unit==units.size()-1)
+            return QString(complete?'[':'{')+' '+text.rightJustified(width-3)+(complete?']':'}');
         divisor*=1024;
     }
     return {};

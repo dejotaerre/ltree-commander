@@ -1697,16 +1697,16 @@ while True:
     void branchSizeLabels()
     {
         BranchSize size;QVERIFY(size.label().isEmpty());
-        size.logged=true;QCOMPARE(size.label(),QString("{ ?"));
+        size.logged=true;QCOMPARE(size.label(),QString("{ ? }"));
         size.complete=true;QVERIFY(size.label().isEmpty());
         size.files=1;
         for(const auto pair:QList<QPair<quint64,QString>>{{0,"0k"},{1,"1k"},{1024,"1k"},{1025,"2k"},{2577*1024,"2.577k"}}){
-            size.bytes=pair.first;const auto label=size.label();QCOMPARE(label.size(),14);QVERIFY(label.startsWith('['));QVERIFY(label.endsWith(pair.second));
+            size.bytes=pair.first;const auto label=size.label();QCOMPARE(label.size(),14);QVERIFY(label.startsWith('['));QVERIFY(label.endsWith(pair.second+"]"));
         }
-        size.complete=false;QVERIFY(size.label().startsWith('{'));
+        size.complete=false;QVERIFY(size.label().startsWith('{'));QVERIFY(size.label().endsWith('}'));
         size.complete=true;size.bytes=quint64(std::numeric_limits<qint64>::max());
-        QCOMPARE(size.label().size(),14);QVERIFY(size.label().endsWith("8.388.608T"));
-        size.bytes=std::numeric_limits<quint64>::max();QCOMPARE(size.label().size(),14);QVERIFY(size.label().endsWith("16.777.216T"));
+        QCOMPARE(size.label().size(),14);QVERIFY(size.label().endsWith("8.388.608T]"));
+        size.bytes=std::numeric_limits<quint64>::max();QCOMPARE(size.label().size(),14);QVERIFY(size.label().endsWith("16.777.216T]"));
     }
     void branchSizesLoggingCollapseAndChanges()
     {
@@ -1722,7 +1722,7 @@ while True:
         session.apply(scan(base,true),true);size=session.branchSizes().value(base);
         QCOMPARE(size.bytes,quint64(3601));QCOMPARE(size.files,quint64(4));QVERIFY(size.complete);
         QVERIFY(session.branchSizes().value(base+"/empty").label().isEmpty());
-        QCOMPARE(session.branchSizes().value(a2).files,quint64(1));QVERIFY(session.branchSizes().value(a2).label().endsWith("0k"));
+        QCOMPARE(session.branchSizes().value(a2).files,quint64(1));QVERIFY(session.branchSizes().value(a2).label().endsWith("0k]"));
         session.selectDirectory(a);session.toggleCollapse(false);
         QVERIFY(std::none_of(session.tree().cbegin(),session.tree().cend(),[&](const TreeRow &row){return row.path==deep;}));
         QCOMPARE(session.branchSizes().value(a).bytes,quint64(3584));QVERIFY(session.branchSizes().value(a).complete);
@@ -1766,20 +1766,20 @@ while True:
             }
             QVERIFY2(converted==reference,qPrintable(QString("Size column %1 offset %2: %3").arg(column).arg(offset).arg(text)));
         };
-        badge(123,"{           2k",true);capture(window,"tree-sizes-partial");
+        badge(123,"{          2k}",true);capture(window,"tree-sizes-partial");
         window.setTreeSizesVisible(false);QCOMPARE(treeRegion(),without);window.setTreeSizesVisible(true);
-        window.load(true,true);QTRY_VERIFY(!window.busy());badge(123,"[           4k",true);capture(window,"tree-sizes-complete");
-        QTest::keyClick(&window,Qt::Key_F8);badge(65,"[           4k",true);badge(65,"[           4k",false,640);
+        window.load(true,true);QTRY_VERIFY(!window.busy());badge(123,"[          4k]",true);capture(window,"tree-sizes-complete");
+        QTest::keyClick(&window,Qt::Key_F8);badge(65,"[          4k]",true);badge(65,"[          4k]",false,640);
         capture(window,"tree-sizes-split");
         QTest::keyClick(&window,Qt::Key_F8,Qt::ShiftModifier);QTest::keyClick(&window,Qt::Key_C);
-        badge(43,"[           4k",true);badge(65,"[           4k",false,640);
+        badge(43,"[          4k]",true);badge(65,"[          4k]",false,640);
         QTest::keyClick(&window,Qt::Key_F8,Qt::ShiftModifier);QTest::keyClick(&window,Qt::Key_B);
-        badge(43,"[           4k",true);badge(43,"[           4k",false,640);
+        badge(43,"[          4k]",true);badge(43,"[          4k]",false,640);
         window.resize(640,400);QTest::qWait(100);QTRY_COMPARE(window.columns(),80);
-        badge(25,"[           4k",true);badge(25,"[           4k",false,320);capture(window,"tree-sizes-split-80");
+        badge(25,"[          4k]",true);badge(25,"[          4k]",false,320);capture(window,"tree-sizes-split-80");
         write(base+"/root.txt",QByteArray(5000,'r'));QTest::keyClick(&window,Qt::Key_F3);QTRY_VERIFY(!window.busy());
-        badge(25,"[           7k",true);badge(25,"[           4k",false,320);
-        QTest::keyClick(&window,Qt::Key_Tab);badge(25,"[           7k",false);badge(25,"[           7k",true,320);
+        badge(25,"[          7k]",true);badge(25,"[          4k]",false,320);
+        QTest::keyClick(&window,Qt::Key_Tab);badge(25,"[          7k]",false);badge(25,"[          7k]",true,320);
         QTest::keyClick(&window,Qt::Key_Tab);
         QTest::keyClick(&window,Qt::Key_F8);QTest::keyClick(&window,Qt::Key_Return);QCOMPARE(window.session().view,View::Directory);
         const auto files=treeRegion();window.setTreeSizesVisible(false);QCOMPARE(treeRegion(),files);
