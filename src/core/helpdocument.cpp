@@ -50,6 +50,11 @@ Each side has its own directory, file view, filter and selection. Tab changes th
 : Shift+F8 | Swap sides or cycle the statistics layout.
 : Alt+F | Cycle Name, Size/attributes, Details and Long name layouts.
 
+= FILE ATTRIBUTES
+The attributes column follows each file's mounted filesystem, including mixed Branch/Showall/Global lists. Linux filesystems show POSIX permissions such as rw-r--r-- (0644 in compact columns). Special modes use s/S and t/T. A separate l identifies symbolic links and their own permissions.
+
+FAT/exFAT and NTFS show H/R/S/A: Hidden, Read-only, System and Archive. These are actual on-disk DOS attributes; a dot filename and an unavailable write permission do not imply DOS H/R. A dot marks each unset flag; ???? means attributes could not be read. NTFS3 and NTFS-3G are supported when the driver exposes the attributes. F3 refreshes the values. The A command continues to edit POSIX permissions.
+
 = READING THIS MANUAL
 Use Left/Right for chapters, Tab for the index and F to find a word anywhere in the manual. Space repeats a help search. Esc or F1 returns to your work with the selection and tags intact.
 )HELP"},
@@ -178,7 +183,7 @@ Regex runs within each line. ^ and $ refer to that line; a match cannot span mul
 
 Hits during a batch search counts matching files. In the viewer, each occurrence is highlighted. Zero-length Regex matches advance without looping. A retrieved history string uses the mode currently selected with F4.
 
-The terminal prototype does not yet search file contents. Use the graphical interface for this workflow.
+Terminal mode does not yet search file contents. Use the graphical interface for this workflow.
 )HELP"},
 {HelpTopic::Transfer, "Copy, move and rename", R"HELP(
 = COPY OR MOVE FILES
@@ -395,14 +400,14 @@ The user's shell keeps its normal history. LTree does not disable or erase that 
 ltc                         Graphical application when a display is available
 ltc /home/alex             Start at a selected directory
 ltc --tree-sizes             Show logged directory size annotations
-ltc --terminal              Use the experimental terminal interface
+ltc --terminal              Use the terminal interface
 ltc --new-instance          Explicitly allow another instance
 ltc --fullscreen            Start the graphical interface fullscreen
 ltc --help                  Show command-line options
 
 The graphical window remembers its normal size and maximized/fullscreen state when closed normally. Settings are saved in ~/.config/ltreec/window.ini (or XDG_CONFIG_HOME). --fullscreen overrides the saved state. X11 may restore placement; Wayland leaves placement to the desktop. A minimized window reopens visible.
 
-By default, launching again activates the existing graphical instance. Without a graphical display, LTree selects terminal mode automatically. Terminal mode currently offers a smaller set of commands.
+By default, launching again activates the existing graphical instance. Without a graphical display, LTree selects terminal mode automatically. Terminal mode adapts portable commands to ncurses; its help explains keyboard and desktop-dependent differences.
 
 = DESKTOP KEYS
 GNOME may reserve some Alt function keys. LTree keeps those desktop functions intact. Archives use Enter. Where offered, F4 in lists and F10 in the viewer show alternate command menus without holding a modifier.
@@ -504,75 +509,115 @@ Screen size uses Qt logical pixels, including on Wayland. Session and desktop in
 }
 QVector<HelpSection> terminalManual()
 {
-    return {
-{HelpTopic::Terminal, "Terminal workspace", R"HELP(
-= LTREE IN YOUR TERMINAL
-The terminal interface uses the shared file core and a classic blue, yellow and cyan display. Your terminal provides the font. It is an experimental interface with fewer commands than the graphical application.
+    auto sections=manual();
+    sections.append({HelpTopic::Terminal, "Terminal workspace and keyboard", R"HELP(
+= SAME FILE OPERATIONS
+The terminal interface uses the same filesystem engines as the graphical interface. Copy, move, rename, deletion, attributes, timestamps, Prune, Graft, comparisons, searches and archives retain their safety checks. Operations refresh both panels and keep the selection near its previous position.
 
 ```
-                 Current directory
- ┌─────────────────────────────────────────────┐
- │               Directory tree                │
- │                                             │
- ├─────────────────────────────────────────────┤
- │                 File list                   │
- └─────────────────────────────────────────────┘
-             Commands and current status
+ Current directory                 FILE specification
+ ┌─────────────────────────┬───────────────────────┐
+ │      Directory tree     │ Disk / file statistics│
+ ├─────────────────────────┤                       │
+ │         File list       │                       │
+ └─────────────────────────┴───────────────────────┘
+ Commands, prompts and current status
 ```
 
-: Enter | Log a directory / enter files / return to the tree.
-: Arrows / PgUp/PgDn | Navigate entries or pages.
-: Home / End | First / last entry.
-: Backspace | Go to the parent directory.
-: + / * | Log a directory / log the branch.
-: F3 | Refresh.
-: F8 / Tab | Split the screen / change panes.
-: L | Choose a mount or enter a path.
-: Q | Quit with confirmation.
-: Esc | Cancel the prompt or stop remaining work.
+: Enter | Tree / file list; open compressed files from the list.
+: + / * | Log a directory / log a branch.
+: F3 / Alt+F3 | Refresh / relog.
+: F4 | Cycle normal, Ctrl and Alt menus. Choose a command to close the menu.
+: F8 / Tab | Split / switch panels.
+: Shift+F8 | Swap panels or select statistics panels.
+: < / > | Cycle logged roots without losing their tags or position.
+: A (tree) / ? | Available space / extended statistics.
+: E / O (file list) | Edit with the system editor; binary files use internal Hex editing.
+: X | Run a command or open a shell in the selected directory, then return.
 
-= READING HELP
-Left/Right changes chapters. Tab opens the index; choose a chapter with the arrows and Enter. PgUp/PgDn scroll; F searches this terminal manual and Space repeats. F1 or Esc returns to your work.
+= TERMINAL KEY TRANSPORT
+Kitty's extended keyboard protocol is detected automatically, including over SSH. Hold Ctrl or Alt to display its command menu; release it to restore the normal menu. Modifier release events never run commands. External editors and shells receive the previous keyboard mode.
 
-Copy, move, deletion, JFC, X and persistent history are not yet available in terminal mode. Content searches, archives and byte editing are available in the graphical interface.
-)HELP"},
-{HelpTopic::TerminalFiles, "Terminal files, tags and filters", R"HELP(
-= LISTS AND TAGS
-: B / S | Branch / Showall.
-: Ctrl+B / Ctrl+S | Tagged Branch / Showall.
-: T / U | Tag / untag the current file.
-: Ctrl+T / Ctrl+U | Tag / untag all files in the list.
-: Space | Next file.
+Classic terminal protocols cannot distinguish Ctrl+I from Tab, Ctrl+M from Enter or Ctrl+J from a newline. Use F4 then the command letter; F4 then Enter toggles tagged-only files. F4 then a function key selects its Ctrl variant. F10 provides modifier menus in the viewer. Kitty/xterm modified function keys are supported when delivered by the terminal.
 
-= FILTER AND DISPLAY
-: F | Enter a filename Filespec, such as *.txt.
-: Up / Down (prompt) | Recall session Filespec history.
-: Alt+F | Cycle Name, Size/attributes, Details and Long name.
-: Alt+S | Cycle the sort key.
-: F4 | Show Ctrl / Alt command menus for one command.
+GNOME's global keys remain unchanged. Archives open with Enter. Pixel window placement, font selection and graphical window zoom are controlled by your terminal emulator and desktop.
 
-The terminal prototype remembers Filespec entries only during this session. It does not yet search file contents; Ctrl+S selects tagged Showall here.
-)HELP"},
-{HelpTopic::TerminalView, "Terminal viewer and Autoview", R"HELP(
-= VIEW A FILE
-: V | Open the text / Hex viewer.
-: H | Switch Text / Hex while viewing.
-: Arrows / PgUp/PgDn | Scroll.
-: Home / End | Start / end of the file.
-: Enter / Esc / Q | Return to the file list.
+= CONFIGURATION AND EXTERNAL PROGRAMS
+Filespec, search, timestamp and Graft histories share ~/.config/ltreec with the graphical application, respecting XDG_CONFIG_HOME and LTREE_HISTORY_FILE. Up/Down opens a selectable history list; F3 retrieves the last entry.
+
+~/.selected_editor takes priority, followed by VISUAL, EDITOR and an available system editor. The configuration is read as a literal assignment, never executed. LTREE_ALT_EDITOR and LTREE_ALT_VIEWER may name alternate terminal programs.
+
+The user's X shell keeps normal history. LTree releases the terminal to external programs and restores its screen on return. Clipboard publication requires wl-copy on Wayland or xclip on X11; an internal selection and Gather-to-file remain available without a desktop. Printing supports a file or a pipe to an installed print command.
+)HELP"});
+    sections.append({HelpTopic::TerminalFiles, "Terminal files, transfers and searches", R"HELP(
+= FILE AND DIRECTORY COMMANDS
+: C / Ctrl+C / Alt+C | Copy current / tagged flat / tagged with directory paths.
+: M / Ctrl+M / Alt+M | Move current / tagged flat / tagged with directory paths.
+: M (tree) | Create a directory, including nested names.
+: D / Ctrl+D | Delete current / tagged files with confirmation.
+: R / Ctrl+R | Rename current / tagged files with a mask and case selection.
+: A / Ctrl+A | Set permissions of the selected / tagged files.
+: Alt+A (tree) | Set the selected directory's permissions.
+: N / Ctrl+N | Set, adjust or increment written/accessed timestamps.
+: G / Ctrl+G (tree) | Global / tagged Global across logged roots.
+: H (tree) | Create a symbolic link at the destination you enter.
+: Alt+G / Alt+P (tree) | Graft / Prune; PRUNE must be typed explicitly.
+: C / Alt+C (tree) | Directory / logged branch comparison.
+: J / Ctrl+J | Compare two files / two tagged files.
+: Alt+K | Duplicate, unique, size, content or date filters.
+: Ctrl+S (files) | Search tagged files in Text, Hex, Unicode or Regex mode.
+: F5 / Ctrl+F5 (files) | Create an archive from current / tagged files.
+
+Copy/move accepts a filename mask, letter case, destination, path policy and replacement policy. The destination defaults to the other panel. Existing files and per-file errors offer confirmation, retry, skip or cancel.
+
+Tagged deletion asks Y/N and then "Confirm delete for each file?". After deleting a Branch without failures or skipped files, removing its empty directories and parent requires a separate confirmation. Existing files keep their directories safe. Selection stays close to the removed item.
+
+= SEARCH AND HISTORY
+F2 switches case sensitivity; F4 chooses Text, Hex, Unicode or Regex. Progress shows the current file, moving selector, hits, byte bar, elapsed time, remaining time, speed and spinner. Esc cancels remaining files and retains unprocessed tags. Reading errors offer Retry, Keep tag, Untag or a policy for that error type.
+
+V remembers the executed query, mode and case setting; Space/+ finds the next match and - the previous one. Regex uses the shared line-based matcher and bounded resources.
+
+History uses Up/Down, PgUp/PgDn and Home/End to select. Left/Right filters marks; Del deletes, Ins marks, a letter or digit assigns a retrieval mark, Enter retrieves, | appends, F2 sorts, F3 saves and F4 reloads.
+
+= COMPRESSED FILES
+Enter browses ZIP, TAR, 7Z and formats supported by libarchive. Members can be tagged, filtered, viewed, searched or extracted. Archive members remain read-only; extract before editing.
+
+F3 in Create chooses ZIP, TAR, TAR.GZ, TAR.BZ2, TAR.XZ, 7Z, GZ, BZ2 or XZ. F2 preserves paths; F4 controls replacement. The filename is editable with arrows, Home, End, Backspace and Delete. GZ/BZ2/XZ streams hold one file; use a TAR variant for multiple files. Encrypted input can request a password; encrypted output and in-place archive updates are shared development limits.
+)HELP"});
+    sections.append({HelpTopic::TerminalView, "Terminal viewer, Autoview and Hex editor", R"HELP(
+= VIEW COMMANDS
+The common Viewer chapter describes the text commands. The terminal supplies Alpha, Dump, Hex, Junk, seven character sets, wrapping, line selection, mask, ruler, tab widths, offsets, bookmarks, query navigation, file sequences, reload, autoscroll and Gather.
+
+: F10 | Cycle Ctrl / Alt menus; select a command to return to normal.
+: Ctrl+0..9 / Alt+0..9 | Set / retrieve bookmarks through F10 menus.
+: F3 / Ctrl+F3 | Reload / continuous reload.
+: Shift+F2..F6 / Shift+F7 | Autoscroll speeds / loop.
+: G / F4 | Mark a selection start and end, then write, append or copy it.
+: Ctrl+C / F5 / F2 | Copy selection / append / clear clipboard.
+: F6 | Cycle clipboard gaps.
+: Alt+P | Print to a file or | print-command.
+: X / Alt+X | Run a command or open the current directory's shell.
 
 = AUTOVIEW
-: F7 | Preview the selected file without leaving the list.
-: Shift+H | Switch preview Hex / Text.
-: Shift+Arrows | Scroll the preview.
-: Shift+PgUp/PgDn | Scroll preview pages.
-: Alt+Left/Right | Adjust preview width.
-: Alt+Home | Restore preview width.
-: F7 / Enter / Esc | Close the preview.
+F7 previews the selected file beside the list. Shift+viewer-key operates the preview; Shift+arrows and pages scroll it. Alt+Left/Right/Home changes preview width. F7, Enter or Esc returns to normal lists.
 
-The graphical interface provides content search, tagged-query navigation, Gather, more VIEW COMMANDS and Hex editing. These are not yet implemented in the terminal viewer.
-)HELP"}
-    };
+= INTERNAL HEX EDITOR
+The editor replaces existing bytes without inserting or removing data. One page is buffered at a time. Files must be regular and accessed through safe paths; symbolic links and archive members cannot be edited internally.
+
+: 0-9 / A-F | Replace the highlighted hexadecimal digit.
+: Tab | Switch Hex / ASCII input (one byte per character).
+: Arrows / Home / End | Move within the buffered page.
+: PgUp / PgDn | Change pages, asking to save modified bytes first.
+: Ctrl+S | Save and continue editing.
+: Enter | Finish, asking to save modified bytes.
+: Y (save prompt) | Save changes.
+: N / Esc (save prompt) | Keep editing.
+: F8 | Undo unsaved changes on the page.
+: Esc / Ctrl+C | Discard unsaved page changes and return to the viewer.
+
+Previously saved pages stay saved. Saving verifies file identity and original contents. External changes cause a refusal to save; reload before editing again. Resize preserves the byte position. The internal viewer/editor shares the graphical 32 MiB limit.
+)HELP"});
+    return sections;
 }
 QStringList wrap(QString text, int width)
 {

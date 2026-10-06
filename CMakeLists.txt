@@ -8,7 +8,7 @@ find_package(Qt6 6.11 REQUIRED COMPONENTS Core Widgets Concurrent Network PrintS
 find_package(qtermwidget6 REQUIRED)
 find_package(LibArchive REQUIRED)
 
-add_library(ltree_core src/core/helpdocument.cpp src/core/session.cpp src/core/filespec.cpp src/core/sort.cpp src/fs/scanner.cpp src/fs/search.cpp src/fs/mounts.cpp src/fs/viewdocument.cpp src/fs/hexedit.cpp src/fs/archive.cpp src/fs/filecompare.cpp src/fs/makedirectory.cpp src/fs/deletedirectory.cpp src/fs/prune.cpp src/fs/graft.cpp src/fs/copyfiles.cpp src/fs/metadata.cpp src/fs/stamp.cpp src/fs/systemstats.cpp src/fs/rename.cpp src/fs/directorycompare.cpp src/fs/symlink.cpp)
+add_library(ltree_core src/core/helpdocument.cpp src/core/session.cpp src/core/filespec.cpp src/core/sort.cpp src/fs/scanner.cpp src/fs/fileattributes.cpp src/fs/search.cpp src/fs/mounts.cpp src/fs/viewdocument.cpp src/fs/hexedit.cpp src/fs/archive.cpp src/fs/filecompare.cpp src/fs/makedirectory.cpp src/fs/deletedirectory.cpp src/fs/prune.cpp src/fs/graft.cpp src/fs/copyfiles.cpp src/fs/metadata.cpp src/fs/stamp.cpp src/fs/systemstats.cpp src/fs/rename.cpp src/fs/directorycompare.cpp src/fs/symlink.cpp)
 target_include_directories(ltree_core PUBLIC src)
 target_link_libraries(ltree_core PUBLIC Qt6::Core LibArchive::LibArchive)
 target_compile_options(ltree_core PRIVATE -Wall -Wextra -Wpedantic)
@@ -37,11 +37,19 @@ add_custom_command(OUTPUT "${LTREE_CONSOLE_TTF}"
 set_source_files_properties("${LTREE_CONSOLE_TTF}" PROPERTIES GENERATED TRUE)
 qt_add_resources(ltree_ui execute_font PREFIX "/" BASE "${CMAKE_CURRENT_BINARY_DIR}" FILES "${LTREE_CONSOLE_TTF}")
 
-option(LTREE_BUILD_TERMINAL "Build the experimental ncurses terminal interface" ON)
+option(LTREE_BUILD_TERMINAL "Build the ncurses terminal interface" ON)
 if(LTREE_BUILD_TERMINAL)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(NCURSESW REQUIRED IMPORTED_TARGET ncursesw)
-    add_library(ltree_terminal src/terminal/terminalui.cpp)
+    add_library(ltree_terminal src/terminal/terminalui.cpp src/terminal/terminalcommands.inc
+        src/terminal/terminalhistory.inc
+        src/terminal/terminalfileops.inc
+        src/terminal/terminalarchive.inc
+        src/terminal/terminalcompare.inc
+        src/terminal/terminalnavigation.inc
+        src/terminal/terminalviewer.inc
+        src/terminal/terminaldispatch.inc
+        src/terminal/editor.cpp src/terminal/keyboard.cpp)
     target_link_libraries(ltree_terminal PUBLIC ltree_core Qt6::Concurrent PkgConfig::NCURSESW)
     target_compile_options(ltree_terminal PRIVATE -Wall -Wextra -Wpedantic)
 endif()
@@ -57,6 +65,24 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_executable(ltree-file-attributes-tests tests/test_file_attributes.cpp)
+    target_link_libraries(ltree-file-attributes-tests PRIVATE ltree_core Qt6::Test)
+    target_link_options(ltree-file-attributes-tests PRIVATE "-Wl,--wrap=lgetxattr")
+    add_test(NAME ltree-file-attributes-tests COMMAND ltree-file-attributes-tests)
+    if(LTREE_BUILD_TERMINAL)
+        add_executable(ltree-terminal-keyboard-tests tests/test_terminal_keyboard.cpp)
+        target_link_libraries(ltree-terminal-keyboard-tests PRIVATE ltree_terminal Qt6::Test)
+        add_test(NAME ltree-terminal-keyboard-tests COMMAND ltree-terminal-keyboard-tests)
+        add_executable(ltree-terminal-editor-tests tests/test_terminal_editor.cpp)
+        target_link_libraries(ltree-terminal-editor-tests PRIVATE ltree_terminal Qt6::Test)
+        add_test(NAME ltree-terminal-editor-tests COMMAND ltree-terminal-editor-tests)
+        foreach(suite terminal_pty terminal_extended_pty terminal_operations_pty terminal_kitty_pty)
+            add_test(NAME ltree-${suite} COMMAND ${CMAKE_COMMAND} -E env
+                "LTC_TEST_BINARY=$<TARGET_FILE:ltc>" "LTREE_PTY_WORK="
+                ${LTREE_FONT_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/${suite}.py)
+            set_tests_properties(ltree-${suite} PROPERTIES TIMEOUT 180)
+        endforeach()
+    endif()
     add_executable(ltree-geometry-tests tests/test_geometry.cpp)
     target_link_libraries(ltree-geometry-tests PRIVATE ltree_ui Qt6::Test)
     add_dependencies(ltree-geometry-tests ltc)

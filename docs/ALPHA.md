@@ -13,12 +13,14 @@ First public source alpha of **LTree Commander**, a native Linux clone aiming to
 
 Tree/Branch/Showall/Global navigation, logging and tags; Filespec and persistent histories; split panels and Autoview; copy/move/delete/rename with supported tagged variants and masks; POSIX permissions, timestamps and symbolic links; Prune/Graft; content search with progress, spinner and optional line-based Regex; text/Hex viewer and byte overwrite editing; comparison; archive browsing, extraction and ZIP/TAR/7Z/compressed stream creation; shell integration and contextual F1 manual.
 
+File attributes adapt to each mounted filesystem in both graphical and terminal lists: POSIX permissions (`rw-r--r--`, or `0644` in compact columns), and actual DOS `HRSA` flags on FAT/exFAT/NTFS. Symbolic links have a separate `l` indicator; unreadable DOS attributes appear as `????`.
+
 The graphical window also remembers its normal size and maximized/fullscreen state. X11 placement can be restored; Wayland leaves placement to the compositor. Settings remain in ~/.config/ltreec, respecting XDG_CONFIG_HOME.
 
 ## Known limits
 
-- The terminal backend is experimental. It offers navigation, tagging, Filespec, split panels, Autoview and text/Hex viewing. It does not yet offer content search or file mutation commands.
-- The graphical viewer loads at most 32 MiB. Regex is evaluated by line, with bounded resources; multiline matching is not implemented.
+- The ncurses backend adapts portable graphical operations to terminal menus, including transfers, deletion, metadata, search, comparisons, archives, shell commands and the viewer. Classic terminals merge some Ctrl keys with Tab/Enter; F4 and F10 menus provide access to their operations. Window geometry and fonts remain controlled by the terminal emulator. Desktop clipboard requires an available wl-copy/xclip adapter; Gather-to-file works without a desktop. Printing can write a file or use an installed command. See [terminal commands](TERMINAL.md).
+- Both viewers load at most 32 MiB. Regex is evaluated by line, with bounded resources; multiline matching is not implemented.
 - No complete ZTree configuration/macro compatibility, advanced rename masks, recovery journal or general undo.
 - Ordinary Delete is permanent; Prune optionally uses trash. Canceling a batch preserves completed operations. Interrupted cross-filesystem moves can leave partial results requiring manual review.
 - Recursive permission editing, ACL/owner management, tolerance rules and some Windows-specific commands remain incomplete or deliberately adapted to Linux.
@@ -30,7 +32,7 @@ The graphical window also remembers its normal size and maximized/fullscreen sta
 
 The release checks cover the main file manager, viewer/archives, timestamp changes, manual and window geometry using isolated synthetic fixtures. Debug/Release and selected native Wayland checks were run during development. Real PTY tests covered terminal startup, navigation, color handling, F7 Autoview and F1.
 
-For the publication, the public source selection is rebuilt from scratch in Release and all five CTest suites are run. See the [release notes](https://github.com/dejotaerre/ltree-commander/releases/tag/v0.1.0-alpha.1) for the final result.
+For the publication, the public source selection is rebuilt from scratch in Release and the CTest suites are run. See the [release notes](https://github.com/dejotaerre/ltree-commander/releases/tag/v0.1.0-alpha.1) for the final result.
 
 To reproduce the automated suite:
 
@@ -45,3 +47,5 @@ Tests use disposable fixtures and isolate the application's histories. Do not po
 ## Further reading
 
 [README](../README.md) · [Detailed usage](USAGE.md) · [Viewer and archives](VISOR_Y_COMPRIMIDOS.md) · [Implementation notes](IMPLEMENTACION.md) · [Changelog](../CHANGELOG.md)
+
+Terminal: A/Ctrl+A edit POSIX permissions; N/Ctrl+N edit file timestamps with Written/Accessed/Both and Set/Adjust/Increment modes. Both review the change before applying and preserve selection and tags when refreshing both panels. New date history is persistent and shared with the graphical interface. A in the tree is Avail; Alt+A edits directory permissions.

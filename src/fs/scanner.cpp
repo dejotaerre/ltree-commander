@@ -16,8 +16,9 @@ bool isWithin(const QString &path, const QString &base)
 ScanResult scanDirectories(const QString &path, bool recursive, const Cancellation &cancel, const QStringList &boundaries)
 {
     ScanResult result;
+    const auto locations = mountedLocations(nullptr, true);
     QSet<QString> mounts(boundaries.begin(), boundaries.end());
-    if (recursive) for (const auto &mount : mountedLocations(nullptr, true)) mounts.insert(mount.path);
+    if (recursive) for (const auto &mount : locations) mounts.insert(mount.path);
     QStringList pending{path};
     while (!pending.isEmpty()) {
         if (cancel->load()) { result.cancelled = true; break; }
@@ -44,7 +45,7 @@ ScanResult scanDirectories(const QString &path, bool recursive, const Cancellati
                 } else {
                     scan.files.append({entry.absoluteFilePath(), entry.fileName(), entry.size(),
                                        entry.lastModified(), entry.isHidden(), entry.isWritable(),
-                                       entry.isSymLink()});
+                                       entry.isSymLink(), readFileAttributes(entry.absoluteFilePath(), filesystemTypeForPath(entry.absoluteFilePath(), locations))});
                 }
             }
             // Una lectura interrumpida no debe reemplazar un directorio con datos parciales.

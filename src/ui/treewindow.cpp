@@ -400,7 +400,7 @@ TreeWindow::FileLayout TreeWindow::fileLayout(int top, int end) const
     if (fileDisplay_ == FileDisplay::Details) layout.dateWidth = layout.width >= 54 ? 16 : layout.width >= 44 ? 10 : 0;
     if (fileDisplay_ == FileDisplay::Details || fileDisplay_ == FileDisplay::SizeAttributes) {
         layout.sizeWidth = layout.width >= 26 ? 11 : layout.width >= 18 ? 8 : 0;
-        layout.attrsWidth = layout.width >= 26 ? 3 : 0;
+        layout.attrsWidth = layout.width >= 64 && fileDisplay_ == FileDisplay::Details ? 11 : layout.width >= 26 ? 6 : 0;
     }
     int remaining = layout.width;
     for (const int width : {layout.dateWidth, layout.attrsWidth, layout.sizeWidth}) if (width) remaining -= width + 1;
@@ -463,7 +463,7 @@ void TreeWindow::drawFiles(QPainter &p, int top, int end, bool selected)
         }
         if (layout.attrsWidth) {
             column -= layout.attrsWidth + 1;
-            const QString attrs = QString(file.writable ? "." : "r") + (file.hidden ? "h" : ".") + (file.symlink ? "l" : ".");
+            const QString attrs = fileAttributeText(file.attributes, file.symlink, layout.attrsWidth);
             drawText(p, column, row, attrs, ink, layout.attrsWidth);
         }
         if (layout.sizeWidth) {

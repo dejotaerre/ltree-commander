@@ -53,9 +53,9 @@ All screenshots show LTree Commander itself with synthetic example files.
 - Text/binary file comparison and directory/branch comparison.
 - Archive browsing, member search, extraction and creation of **ZIP, TAR, TAR.GZ, TAR.BZ2, TAR.XZ and 7Z**; single-file **GZ, BZ2 and XZ** output.
 - Integrated shell through **X**, external editor integration, contextual **F1** help, single-instance activation and saved graphical window size/state.
-- An **experimental terminal interface**, sharing navigation and the classic appearance with a smaller command set.
+- A **terminal interface** with portable graphical commands, the classic appearance and modifier menus adapted to ncurses.
 
-The graphical interface is the main alpha. The terminal interface currently provides navigation, tags, Filespec, split panels, Autoview and text/Hex viewing; content search and file mutations are not implemented there yet. RAR support depends on libarchive and has not been fully tested. Archive members cannot yet be edited in place. The viewer currently loads at most **32 MiB**.
+The graphical and terminal interfaces share filesystem engines. Terminal commands include transfers, deletion, attributes, timestamps, search, comparisons, archives, shell execution and an extended viewer. F4 and F10 menus expose commands whose modifier keys cannot be distinguished by a classic terminal. See [terminal usage](docs/TERMINAL.md). RAR support depends on libarchive and has not been fully tested. Archive members cannot yet be edited in place. The viewer currently loads at most **32 MiB**.
 
 ## Build
 
@@ -82,7 +82,7 @@ ctest --test-dir build --output-on-failure
 
 The default font input is `/usr/share/kbd/consolefonts/default8x16.psfu.gz`. If your distribution stores its PSF2 8×16 font elsewhere, pass `-DLTREE_PSF_FONT=/absolute/path/to/font.psfu.gz`. The grid reads that installed bitmap and the integrated shell uses a locally generated TrueType version. Font data and generated fonts are not distributed in this source release. See [third-party notices](THIRD_PARTY.md).
 
-To omit the experimental terminal backend, configure with `-DLTREE_BUILD_TERMINAL=OFF`. To omit tests, use `-DBUILD_TESTING=OFF`.
+To omit the terminal backend, configure with `-DLTREE_BUILD_TERMINAL=OFF`. To omit tests, use `-DBUILD_TESTING=OFF`.
 
 ### Run
 

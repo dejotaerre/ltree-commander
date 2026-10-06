@@ -1,0 +1,7 @@
+#include "terminal/terminalhistory.inc"
+#include "terminal/terminalfileops.inc"
+#include "terminal/terminalarchive.inc"
+#include "terminal/terminalcompare.inc"
+#include "terminal/terminalnavigation.inc"
+#include "terminal/terminalviewer.inc"
+#include "terminal/terminaldispatch.inc"

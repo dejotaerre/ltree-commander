@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument("directory", "Navigation root; defaults to home (GUI) or the current directory (terminal).");
-    parser.addOption({"terminal", "Force the experimental terminal interface; automatic without a graphical environment."});
+    parser.addOption({"terminal", "Force the terminal interface; automatic without a graphical environment."});
     parser.addOption({"fullscreen", "Start in fullscreen mode."});
     parser.addOption({"new-instance", "Allow an additional independent instance."});
     parser.addOption({"tree-sizes", "Show logged branch sizes beside the directory tree."});

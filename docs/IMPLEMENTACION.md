@@ -480,6 +480,11 @@ Pantalla mínima 40×12, adaptación a resize, fondo azul/etiquetas cian/texto a
 Es una prueba de presentación, con alcance menor que la GUI. Copia, movimiento, borrado, Prune/Graft, búsquedas de contenido, JFC, X, Global, configuración, colores por extensión e historiales persistentes no están portados. No reemplaza el programa gráfico ni garantiza todavía paridad con MC/ZTreeWin.
 
 
+### Pendiente reportado: X eXecute en terminal
+
+El usuario confirmó durante la prueba binaria en Aorus (192.168.31.111, 2026-10-04) que X no abre la consola en modo terminal. Execute está implementado únicamente en la GUI. Queda pendiente portar X al backend ncurses para abrir un shell en el directorio activo y volver al listado conservando la sesión.
+
+
 ### Selección automática de interfaz
 
 Sin DISPLAY, WAYLAND_DISPLAY ni QT_QPA_PLATFORM se elige QCoreApplication y el modo terminal antes de inicializar Qt. Con cualquiera de esas variables no vacía se conserva la GUI; QT_QPA_PLATFORM respeta plataformas explícitas como offscreen para pruebas. --terminal siempre fuerza la terminal. Se detecta el entorno, sin probar conexiones: variables gráficas obsoletas pueden requerir --terminal. En terminal se exige stdin/stdout interactivos; --help, --version y errores de argumentos siguen disponibles sin TTY. No se cambia el modelo de instancia única ni se cierra ninguna instancia existente.
@@ -516,3 +521,41 @@ F4 en el prompt de búsqueda alterna Text, Hex, Unicode y Regex. Funciona en Ctr
 V conserva consulta, modo y sensibilidad; Space y +/- navegan y resaltan coincidencias de longitud variable. Las coincidencias vacías avanzan por caracteres completos, sin bucles. Elegir Regex desde Hex/Dump pasa a Alpha. El historial guarda la cadena en sus archivos actuales; F4 selecciona cómo interpretarla al recuperarla.
 
 Se limita cada línea a 8 Mi unidades UTF-16 y se acotan recursos PCRE2: un límite excedido produce error en lugar de interpretarlo como ausencia de coincidencia. Se conservan progreso, spinner, cancelación y políticas de errores existentes. No incluye búsqueda multilínea ni búsqueda de contenido en el prototipo de terminal. Ejemplo: `^ORDER_[0-9]+$`. Sintaxis: https://doc.qt.io/qt-6/qregularexpression.html y límites: https://www.pcre.org/current/doc/html/pcre2pattern.html.
+
+
+## Editor externo en terminal
+
+E edita el archivo seleccionado en Directory/Branch/Showall, Autoview y el visor. Prioridad: ~/.selected_editor, VISUAL, EDITOR y sensible-editor/editor/nano/vi/vim. La asignación SELECTED_EDITOR se lee como dato literal; no se ejecuta el archivo. Los argumentos se pasan por separado, sin concatenar el nombre del archivo en un comando de shell.
+
+Se suspende ncurses mientras el editor usa los tres canales de la terminal, y se restauran teclado, pantalla y señales al salir. Se actualiza el directorio en ambos paneles y se conserva la selección; desde V se recarga el documento. Un editor configurado que no puede iniciarse informa un error. La GUI conserva su editor habitual.
+
+## O/E y edición HEX en terminal
+
+Solo en terminal, O y E comparten la edición del archivo. Una muestra de 64 KiB distingue texto de binarios por bytes nulos o proporción de controles. Se decodifica primero el marcador de UTF-16/32; el texto Latin-1 sigue siendo válido. La detección es aproximada y V/H/E permite forzar HEX.
+
+El editor HEX interno reemplaza bytes existentes, con entrada por dígito o ASCII, navegación por página, deshacer la página con F8 y confirmación Y/N para guardar. Esc descarta cambios pendientes; las páginas guardadas previamente quedan guardadas. Ctrl+S guarda con confirmación y permite seguir editando. Se conserva el byte seleccionado al redimensionar la terminal.
+
+El guardado reutiliza saveHexPage y HexSnapshot: exige un archivo regular con ruta segura, rechaza enlaces simbólicos, cambios externos e identidad distinta, verifica el contenido original y sincroniza la escritura. Se registran metadatos antes de leer el archivo. Límite interno: 32 MiB. El guardado refresca ambos paneles y Autoview conservando marcas y selección. La interfaz gráfica no cambia.
+
+## Atributos por sistema de archivos
+
+Cada entrada obtiene su tipo de sistema de archivos desde el montaje más específico en /proc/self/mountinfo. La GUI y la terminal muestran permisos POSIX simbólicos en Details ancho y octales en vistas compactas. Los enlaces conservan sus propios permisos obtenidos con lstat y un indicador l separado. F3 relee los metadatos sin perder selección ni marcas.
+
+En FAT/exFAT se leen los flags reales mediante FAT_IOCTL_GET_ATTRIBUTES; en NTFS/NTFS3/NTFS-3G mediante system.ntfs_attrib_be o system.ntfs_attrib. Los montajes fuseblk se verifican por esos atributos; los montajes genéricos fuse solo cambian a DOS cuando la consulta NTFS tiene éxito. HRSA representa Hidden, Read-only, System y Archive. Una lectura DOS no disponible muestra ???? en lugar de inferir flags del nombre o del acceso del usuario. Las consultas no modifican el archivo ni sus atributos. El editor A mantiene su alcance POSIX actual.
+
+## Permisos y New date en terminal
+
+A aplica modos POSIX al archivo/directorio seleccionado; Ctrl+A a los archivos marcados del listado. N/Ctrl+N modifican fechas mediante el mismo planStamp/stampFiles de la GUI. F2 Now, Tab original, F4 Written/Accessed/Both, F5 Set/Adjust/Increment para lotes, F3 y flechas para historial de la sesión. Ambos prompts revisan antes de aplicar con Y/Enter y permiten cancelar con N/Esc o editar con Backspace. Se usan snapshots contra cambios concurrentes y no se siguen enlaces. Los cambios corren fuera del bucle de ncurses con spinner y cancelación, refrescan ambos paneles y conservan selección y marcas.
+
+El pie usa LTree Commander y la versión de QCoreApplication, con reloj HH:mm:ss. Los mensajes de comandos ausentes hablan de terminal mode.
+
+
+## Equivalencia portable de --terminal (2026-10-05)
+
+Este cambio reemplaza el alcance reducido de las notas anteriores del prototipo. El backend ncurses utiliza los motores existentes de copia/movimiento, borrado, creación, renombre, enlaces, Graft/Prune, comparación, búsqueda y comprimidos. Las confirmaciones se presentan dentro de la terminal; los trabajos con cancelación se ejecutan fuera del hilo que dibuja la pantalla.
+
+Se agregan las variantes normal/Ctrl/Alt, máscaras y políticas de reemplazo, refresco de ambos paneles, conservación del selector, búsqueda Text/Hex/Unicode/Regex con progreso/hits/spinner, consulta heredada por V, navegador/creación/extracción de comprimidos, Global y raíces registradas, estadísticas, metadatos, ordenación y filtros, menú del visor, charsets, bookmarks, Gather, impresión a archivo/comando, clipboard condicionado al entorno, reload/autoscroll y Autoview. F4 y F10 dan acceso a funciones cuyos modificadores se confunden en los protocolos clásicos.
+
+Los historiales usan los JSON compartidos de ~/.config/ltreec y respetan XDG_CONFIG_HOME/LTREE_HISTORY_FILE. Los textos del programa siguen en inglés. Se conserva ~/.selected_editor y la edición Hex con protección ante cambios externos. N en la pregunta de guardado mantiene la edición; Esc fuera de la pregunta descarta la página pendiente.
+
+Las diferencias restantes que corresponden al entorno son la geometría y las fuentes de la ventana del emulador, los diálogos gráficos sustituidos por prompts de texto, el clipboard del escritorio y el destino de impresión. Las limitaciones que también tiene la GUI (32 MiB en el visor, edición de miembros comprimidos solo después de extraer, regex por línea y ausencia de undo general) no son funciones exclusivas del modo gráfico. Véase [TERMINAL.md](TERMINAL.md).

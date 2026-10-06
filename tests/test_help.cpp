@@ -80,10 +80,10 @@ private slots:
         help.act(HelpAction::Find,76,19); help.act(HelpAction::Input,76,19,"pending draft"); help.act(HelpAction::Close,76,19); QVERIFY(!help.finding()); QCOMPARE(help.query(),QString("zz-no-such-help-word"));
         help.act(HelpAction::Find,76,19); help.act(HelpAction::Input,76,19,"Regexx"); help.act(HelpAction::Backspace,76,19); help.act(HelpAction::Accept,76,19); QVERIFY(help.matchLine()>=0);
     }
-    void terminalManualOnlyOffersItsCommands() {
-        HelpDocument help(true); QCOMPARE(help.sections().size(),3); help.open(HelpTopic::TerminalView); QCOMPARE(help.section(),2);
+    void terminalManualIncludesPortableCommands() {
+        HelpDocument help(true); QCOMPARE(help.sections().size(),19); help.open(HelpTopic::TerminalView); QCOMPARE(help.section(),18);
         QString body; for(const auto &section:help.sections())body+=section.body;
-        QVERIFY(body.contains("not yet available")); QVERIFY(!body.contains(": Ctrl+D")); QVERIFY(!body.contains(": Alt+P"));
+        QVERIFY(body.contains("Ctrl+D")); QVERIFY(body.contains("Alt+P")); QVERIFY(body.contains("Ctrl+M from Enter")); QVERIFY(!body.contains("not yet available in terminal"));
         for(const auto &section:help.sections()){help.open(section.id);for(const auto &line:help.lines(36))QVERIFY(line.text.size()<=36);}
     }
     void treeHelpScrollFindAndReturnPreserveWorkspace() {

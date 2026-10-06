@@ -1,4 +1,5 @@
 #pragma once
+#include "fs/fileattributes.h"
 
 #include <QDateTime>
 #include <QStringList>
@@ -16,6 +17,7 @@ struct FileEntry {
     bool hidden = false;
     bool writable = true;
     bool symlink = false;
+    FileAttributes attributes{};
 };
 
 struct DirectoryScan {

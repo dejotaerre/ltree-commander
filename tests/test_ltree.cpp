@@ -95,10 +95,10 @@ private slots:
     void fileDisplayCycleTreeAndFiles()
     {
         const auto base=root+"/display";QVERIFY(QDir().mkpath(base));
-        for(int i=0;i<6;++i)write(base+QString("/item_%1.php").arg(i,2,10,QChar('0')),QByteArray(123,'a'));
+        for(int i=0;i<6;++i){const auto path=base+QString("/item_%1.php").arg(i,2,10,QChar('0'));write(path,QByteArray(123,'a'));QVERIFY(::chmod(QFile::encodeName(path).constData(),0644)==0);}
         TreeWindow window(base);window.resize(960,400);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));QTRY_VERIFY(!window.busy());
         QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::Details);
-        displayCells(window,54,15,".php");displayCells(window,64,15,QString("123").rightJustified(11));
+        displayCells(window,46,15,".php");displayCells(window,56,15,QString("123").rightJustified(11));displayCells(window,68,15,"rw-r--r-- .");
         QTest::keyClick(&window,Qt::Key_T,Qt::ControlModifier);const auto tags=window.session().tags;
         const auto directory=window.session().directory;
         QTest::keyClick(&window,Qt::Key_F,Qt::AltModifier);QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::LongName);
@@ -106,11 +106,11 @@ private slots:
         QTest::keyClick(&window,Qt::Key_F,Qt::AltModifier);QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::Name);
         displayCells(window,19,15,".php");displayCells(window,26,15,"item_05");capture(window,"file-display-tree-name");
         QTest::keyClick(&window,Qt::Key_F4);QTest::keyClick(&window,Qt::Key_F4);QTest::keyClick(&window,Qt::Key_F);
-        QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::SizeAttributes);displayCells(window,32,15,QString("123").rightJustified(11));displayCells(window,44,15,"...");
+        QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::SizeAttributes);displayCells(window,29,15,QString("123").rightJustified(11));displayCells(window,41,15,"0644 .");
         capture(window,"file-display-tree-size");QCOMPARE(window.session().view,View::Tree);QCOMPARE(window.session().directory,directory);QCOMPARE(window.session().tags,tags);
         QTest::keyClick(&window,Qt::Key_F,Qt::AltModifier);QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::Details);
         QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_Down);const auto selected=window.session().currentFile()->path;
-        displayCells(window,54,3,".php",true);displayCells(window,80,3,window.session().currentFile()->modified.toString("yyyy-MM-dd HH:mm"),true);
+        displayCells(window,46,3,".php",true);displayCells(window,80,3,window.session().currentFile()->modified.toString("yyyy-MM-dd HH:mm"),true);displayCells(window,68,3,"rw-r--r-- .",true);
         capture(window,"file-display-details");
         for(int i=0;i<4;++i){QTest::keyClick(&window,Qt::Key_F,Qt::AltModifier);QCOMPARE(window.session().currentFile()->path,selected);QCOMPARE(window.session().tags,tags);}
         QCOMPARE(window.fileDisplay(),TreeWindow::FileDisplay::Details);QTest::keyClick(&window,Qt::Key_Escape);QCOMPARE(window.session().view,View::Tree);
@@ -167,9 +167,9 @@ private slots:
     {
         const auto base=root+"/extensions";QVERIFY(QDir().mkpath(base));write(base+"/sample.extension");
         TreeWindow window(base);window.resize(640,400);window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));QTRY_VERIFY(!window.busy());
-        QTest::keyClick(&window,Qt::Key_Return);displayCells(window,14,2,".extensio",true);
-        QTest::keyClick(&window,Qt::Key_Left,Qt::ShiftModifier);displayCells(window,13,2,".extension",true);
-        QTest::keyClick(&window,Qt::Key_Right,Qt::ShiftModifier);displayCells(window,14,2,".extensio",true);
+        QTest::keyClick(&window,Qt::Key_Return);displayCells(window,11,2,".extensio",true);
+        QTest::keyClick(&window,Qt::Key_Left,Qt::ShiftModifier);displayCells(window,10,2,".extension",true);
+        QTest::keyClick(&window,Qt::Key_Right,Qt::ShiftModifier);displayCells(window,11,2,".extensio",true);
         QTest::keyClick(&window,Qt::Key_Home,Qt::ShiftModifier);QCOMPARE(window.session().fileIndex,0);
         QTest::keyClick(&window,Qt::Key_F,Qt::AltModifier);displayCells(window,2,2,"sample.extension",true);capture(window,"file-display-long-80");
         QTest::keyClick(&window,Qt::Key_F);QTest::keyClicks(&window,"*.missing");QTest::keyClick(&window,Qt::Key_Return);QVERIFY(window.session().files().isEmpty());
