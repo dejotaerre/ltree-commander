@@ -2,6 +2,8 @@
 
 Run `ltc --terminal [directory]` in a terminal or over SSH. The same filesystem engines are used by the graphical and ncurses interfaces. Both preserve tags, nearby selection and refreshed destination panels after file operations.
 
+Each terminal launch starts an independent session. Multiple terminals and SSH sessions can run LTC at the same time without `--new-instance`. Single-instance activation applies only to graphical windows.
+
 ## Keyboard menus
 
 Kitty's extended keyboard protocol is detected automatically, including over SSH. Hold Ctrl or Alt to display its command menu; releasing the modifier restores the normal menu. Pressing a command while holding the modifier runs that command. This also works in the viewer. No Kitty configuration changes are required.

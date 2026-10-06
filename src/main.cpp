@@ -50,7 +50,7 @@ int main(int argc, char **argv)
     parser.addPositionalArgument("directory", "Navigation root; defaults to home (GUI) or the current directory (terminal).");
     parser.addOption({"terminal", "Force the terminal interface; automatic without a graphical environment."});
     parser.addOption({"fullscreen", "Start in fullscreen mode."});
-    parser.addOption({"new-instance", "Allow an additional independent instance."});
+    parser.addOption({"new-instance", "Allow an additional graphical instance; terminal sessions are independent."});
     parser.addOption({"tree-sizes", "Show logged branch sizes beside the directory tree."});
     parser.process(*app);
     if (parser.positionalArguments().size() > 1) parser.showHelp(2);
@@ -60,6 +60,15 @@ int main(int argc, char **argv)
         return 2;
     }
     const QString canonical = QFileInfo(root).canonicalFilePath();
+    // Cada terminal tiene su propia sesión; solo la interfaz gráfica comparte el bloqueo.
+    if (terminal) {
+        if (parser.isSet("fullscreen")) { std::fprintf(stderr,"--fullscreen applies to the graphical interface.\n");return 2; }
+#ifdef LTREE_HAS_TERMINAL
+        return ltree::runTerminal(canonical, parser.isSet("tree-sizes"));
+#else
+        std::fprintf(stderr,"This build does not include the terminal interface.\n");return 2;
+#endif
+    }
     const QString runtime=QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     QLockFile instanceLock(runtime+"/ltreec.lock");
     instanceLock.setStaleLockTime(0);
@@ -98,25 +107,6 @@ int main(int argc, char **argv)
         if(!instanceServer.listen(runtime+"/ltreec.socket")){
             std::fprintf(stderr,"Cannot start the instance server: %s\n",qPrintable(instanceServer.errorString()));return 2;
         }
-    }
-    if (terminal) {
-        if (parser.isSet("fullscreen")) { std::fprintf(stderr,"--fullscreen applies to the graphical interface.\n");return 2; }
-#ifdef LTREE_HAS_TERMINAL
-        QObject::connect(&instanceServer, &QLocalServer::newConnection, app.get(), [&] {
-            while (auto *socket = instanceServer.nextPendingConnection()) {
-                QObject::connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-                const auto reply = [socket] {
-                    if (!socket->canReadLine()) return;
-                    socket->readLine();socket->write("terminal-running\n");socket->disconnectFromServer();
-                };
-                QObject::connect(socket, &QLocalSocket::readyRead, app.get(), reply);
-                if (socket->bytesAvailable()) reply();
-            }
-        });
-        return ltree::runTerminal(canonical, parser.isSet("tree-sizes"));
-#else
-        std::fprintf(stderr,"This build does not include the terminal interface.\n");return 2;
-#endif
     }
     ltree::TreeWindow window(canonical);
     ltree::restoreWindowGeometry(window);

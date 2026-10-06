@@ -52,7 +52,7 @@ All screenshots show LTree Commander itself with synthetic example files.
 - A text/Hex viewer with search handoff from tagged files, **Space** for the next match, viewer commands and confirmed byte overwrite editing.
 - Text/binary file comparison and directory/branch comparison.
 - Archive browsing, member search, extraction and creation of **ZIP, TAR, TAR.GZ, TAR.BZ2, TAR.XZ and 7Z**; single-file **GZ, BZ2 and XZ** output.
-- Integrated shell through **X**, external editor integration, contextual **F1** help, single-instance activation and saved graphical window size/state.
+- Integrated shell through **X**, external editor integration, contextual **F1** help, single-instance graphical activation and saved window size/state.
 - A **terminal interface** with portable graphical commands, the classic appearance and modifier menus adapted to ncurses.
 
 The graphical and terminal interfaces share filesystem engines. Terminal commands include transfers, deletion, attributes, timestamps, search, comparisons, archives, shell execution and an extended viewer. F4 and F10 menus expose commands whose modifier keys cannot be distinguished by a classic terminal. See [terminal usage](docs/TERMINAL.md). RAR support depends on libarchive and has not been fully tested. Archive members cannot yet be edited in place. The viewer currently loads at most **32 MiB**.
@@ -94,7 +94,7 @@ To omit the terminal backend, configure with `-DLTREE_BUILD_TERMINAL=OFF`. To om
 ./build/ltc --new-instance /path/to/work
 ```
 
-With a graphical environment, `ltc` opens its own window. Without one, it selects terminal mode automatically. `--terminal` forces the terminal interface from a desktop session. A second normal launch activates the existing instance; `--new-instance` allows another session.
+With a graphical environment, `ltc` opens its own window. Without one, it selects terminal mode automatically. `--terminal` forces the terminal interface from a desktop session. A second graphical launch activates the existing graphical instance; `--new-instance` allows another window. Terminal launches always start an independent session, including over SSH, and do not activate or block graphical windows.
 
 The graphical window saves its size and maximized/fullscreen state on normal exit. X11 can restore placement; Wayland leaves placement to the desktop. Settings and supported histories live under `~/.config/ltreec`, respecting `XDG_CONFIG_HOME`.
 

@@ -60,15 +60,17 @@ class Screen:
   self.grid[self.r][min(self.c,self.cols-1)]=ch;self.last=ch;self.c=min(self.cols-1,self.c+1)
  def text(self):return '\n'.join(''.join(line).rstrip() for line in self.grid)
 class App:
- def __init__(self,name,files):
-  self.dir=work/name;shutil.rmtree(self.dir,ignore_errors=True);self.dir.mkdir();self.root=self.dir/'root';self.root.mkdir();self.home=self.dir/'home';self.home.mkdir();self.runtime=self.home/'runtime';self.runtime.mkdir();self.runtime.chmod(0o700)
+ def __init__(self,name,files,shared_runtime=None,terminal_args=None):
+  self.dir=work/name;shutil.rmtree(self.dir,ignore_errors=True);self.dir.mkdir();self.root=self.dir/'root';self.root.mkdir();self.home=self.dir/'home';self.home.mkdir();self.runtime=Path(shared_runtime) if shared_runtime is not None else self.home/'runtime';self.runtime.mkdir(exist_ok=True);self.runtime.chmod(0o700)
   for name,content in files.items():p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(content)
   self.screen=Screen();self.transcript=bytearray();self.master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,140,0,0))
   env=os.environ.copy()
   for k in ['DISPLAY','WAYLAND_DISPLAY','QT_QPA_PLATFORM','LTREE_HISTORY_FILE']:env.pop(k,None)
   env.update(HOME=str(self.home),XDG_CONFIG_HOME=str(self.home/'config'),XDG_RUNTIME_DIR=str(self.runtime),HISTFILE=str(self.home/'history'),TERM='xterm-256color',LANG='C.UTF-8')
   def setup():os.setsid();fcntl.ioctl(0,termios.TIOCSCTTY,0)
-  self.proc=subprocess.Popen([os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc'),'--terminal','--new-instance',str(self.root)],stdin=slave,stdout=slave,stderr=slave,env=env,preexec_fn=setup);os.close(slave);self.read(.5)
+  self.env=env
+  args=['--terminal'] if terminal_args is None else terminal_args
+  self.proc=subprocess.Popen([os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc')]+args+[str(self.root)],stdin=slave,stdout=slave,stderr=slave,env=env,preexec_fn=setup);os.close(slave);self.read(.5)
  def read(self,seconds=.15):
   end=time.monotonic()+seconds
   while time.monotonic()<end:
@@ -93,9 +95,34 @@ class App:
   if self.proc.poll() is None:os.killpg(self.proc.pid,signal.SIGTERM);self.proc.wait(timeout=5)
   os.close(self.master)
 F1=b'\x1bOP';F3=b'\x1bOR';F4=b'\x1bOS';F5=b'\x1b[15~';F8=b'\x1b[19~';F10=b'\x1b[21~';UP=b'\x1bOA';DOWN=b'\x1bOB';END=b'\x1bOF';HOME=b'\x1bOH';LEFT=b'\x1bOD';RIGHT=b'\x1bOC'
+def independent_instances():
+ instances=[];gui=None;runtime=Path(tempfile.mkdtemp(prefix='ltc-instances-'));log=(work/'instances-gui.log').open('wb')
+ try:
+  first=App('instance-first',{'first-session':b'one'},shared_runtime=runtime);instances.append(first)
+  second=App('instance-second',{'second-session':b'two'},shared_runtime=runtime,terminal_args=[]);instances.append(second)
+  first.wait('first-session');second.wait('second-session')
+  first.check('Two terminals share runtime without new-instance',first.proc.poll() is None and second.proc.poll() is None)
+  first.check('Terminal sessions create no GUI lock or socket',not(runtime/'ltreec.lock').exists() and not(runtime/'ltreec.socket').exists())
+  env=first.env.copy();env['QT_QPA_PLATFORM']='offscreen';binary=os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc')
+  gui=subprocess.Popen([binary,str(first.root)],env=env,stdout=log,stderr=log)
+  deadline=time.monotonic()+5
+  while not(runtime/'ltreec.socket').exists() and gui.poll() is None and time.monotonic()<deadline:time.sleep(.02)
+  first.check('GUI starts while terminals remain open',gui.poll() is None and (runtime/'ltreec.socket').exists())
+  for name,args in [('instance-forced',['--terminal']),('instance-auto',[])]:
+   app=App(name,{'own-session':b'own'},shared_runtime=runtime,terminal_args=args);instances.append(app);app.wait('own-session')
+   app.check(name+' ignores existing GUI',app.proc.poll() is None and gui.poll() is None)
+  activated=subprocess.run([binary,str(first.root)],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=5)
+  first.check('Graphical launch still activates existing window',activated.returncode==0 and b'Activated the existing' in activated.stdout)
+  first.send('q');first.send('y');first.check('Closing one terminal keeps others running',first.proc.wait(timeout=5)==0 and all(app.proc.poll() is None for app in instances[1:]) and gui.poll() is None)
+ finally:
+  for app in instances:app.close()
+  if gui is not None and gui.poll() is None:gui.terminate();gui.wait(timeout=5)
+  log.close();shutil.rmtree(runtime)
+
 def main():
  a=None
  try:
+  independent_instances()
   a=App('transfers',{'a.txt':b'needle\n','b.txt':b'other\n','c.txt':b'third\n'})
   a.check('Tree A is Avail', 'Avail' in a.screen.text());a.send('a');a.check('Capacity displayed', 'Capacity' in a.screen.text());a.send('\x1b');a.send('\r')
   a.send('c');a.wait('COPY');a.send('\r');a.wait('To:');dest=a.dir/'dest';dest.mkdir();a.send('\x15'+str(dest)+'\r');a.wait('Replace existing');a.send('\r');a.wait('Copy 1');a.send('n');a.check('Copy cancelled leaves destination empty',not list(dest.iterdir()))
