@@ -1757,7 +1757,7 @@ while True:
             ConsoleFont font;{QPainter painter(&expected);for(int i=0;i<text.size();++i)
                 QVERIFY(font.draw(painter,i*8,0,text.mid(i,1),selected?Qt::black:QColor(255,255,0)));}
             const auto image=window.grab().toImage();const auto ratio=image.devicePixelRatio();
-            const auto actual=image.copy(qRound((offset+column*8)*ratio),qRound(32*ratio),qRound(14*8*ratio),qRound(16*ratio));
+            const auto actual=image.copy(qRound((offset+column*8)*ratio),qRound(48*ratio),qRound(14*8*ratio),qRound(16*ratio));
             const auto reference=expected.scaled(actual.size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);
             const auto converted=actual.convertToFormat(QImage::Format_RGB32);
             if(converted!=reference){
@@ -2299,6 +2299,33 @@ while True:
         QTRY_VERIFY(!window.busy()); QVERIFY(!QFileInfo::exists(base));
         QCOMPARE(window.session().directory, root+"/beta");
         QVERIFY(QFileInfo::exists(root + "/README.txt"));
+    }
+    void selectableParentRowPreservesBranchAndSplit()
+    {
+        TreeWindow window(root + "/beta"); window.show(); QTRY_VERIFY(!window.busy());
+        QCOMPARE(window.session().tree().first().path, root);
+        QCOMPARE(window.session().tree().first().name, root);
+        QCOMPARE(window.session().tree()[1].name, QString("beta"));
+        QCOMPARE(window.session().tree()[1].prefix, QString("└─"));
+        QVERIFY(window.session().tree().first().parent);
+        capture(window, "selectable-parent-row");
+        QTest::keyClicks(&window, "*"); QTRY_VERIFY(!window.busy());
+        QTest::keyClick(&window, Qt::Key_T, Qt::ControlModifier);
+        QTest::keyClick(&window, Qt::Key_Home);
+        QTest::keyClick(&window, Qt::Key_F8);
+        const auto tags = window.session().tags;
+        QTest::keyClick(&window, Qt::Key_Up);
+        QCOMPARE(window.session().root, root);
+        QCOMPARE(window.session().directory, root);
+        capture(window, "selected-parent-preserved-branch");
+        QCOMPARE(window.session().tags, tags);
+        QVERIFY(window.session().directories().value(root + "/beta").loaded);
+        QCOMPARE(window.oppositeSession()->root, root + "/beta");
+        QTest::keyClick(&window, Qt::Key_Return); QTRY_VERIFY(!window.busy());
+        QVERIFY(window.session().currentDirectory().loaded);
+        QVERIFY(window.session().directories().value(root + "/beta/vacio").loaded);
+        QTest::keyClick(&window, Qt::Key_Tab);
+        QCOMPARE(window.session().directory, root + "/beta");
     }
     void parentExpansionPreservesLoadedTreeAndSplit()
     {
@@ -4018,11 +4045,11 @@ while True:
     {
         Session session(root);
         session.apply(scan(root), true);
-        QCOMPARE(session.tree().size(), 3);
+        QCOMPARE(session.tree().size(), 4);
         QCOMPARE(session.files().size(), 1);
         QVERIFY(!session.directories().value(alpha).loaded);
         session.apply(scan(root, true), true);
-        QCOMPARE(session.tree().size(), 7);
+        QCOMPARE(session.tree().size(), 8);
         QVERIFY(session.directories().value(panel).loaded);
         QCOMPARE(session.directories().value(panel).files.size(), 3);
     }
@@ -4033,14 +4060,14 @@ while True:
         session.selectDirectory(alpha);
         session.tags.insert(panel + "/ordenes.php");
         session.toggleCollapse(false);
-        QCOMPARE(session.tree().size(), 4);
+        QCOMPARE(session.tree().size(), 5);
         QVERIFY(session.directories().value(panel).loaded);
         QVERIFY(session.tags.contains(panel + "/ordenes.php"));
         session.enter(View::Branch, true);
         QCOMPARE(session.files().size(), 1);
         session.returnToTree();
         session.toggleCollapse(false);
-        QCOMPARE(session.tree().size(), 7);
+        QCOMPARE(session.tree().size(), 8);
         session.unlog();
         QVERIFY(!session.currentDirectory().loaded);
         QVERIFY(!session.directories().contains(panel));
@@ -4052,9 +4079,9 @@ while True:
         Session session(root);
         session.apply(scan(root, true), true);
         session.toggleCollapse(true);
-        QCOMPARE(session.tree().size(), 3);
+        QCOMPARE(session.tree().size(), 4);
         session.toggleCollapse(true);
-        QCOMPARE(session.tree().size(), 7);
+        QCOMPARE(session.tree().size(), 8);
     }
     void branchAndShowallScopes()
     {

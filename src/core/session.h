@@ -22,6 +22,7 @@ struct TreeRow {
     String path;
     String prefix;
     String name;
+    bool parent = false;
 };
 
 struct BranchSize {

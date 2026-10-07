@@ -262,10 +262,10 @@ class TerminalUI {
         if (s.view == View::Tree) {
             const auto *sizes = sizes_ && area > 35 ? &s.branchSizes() : nullptr;
             for (int row = 2, i = pane.treeTop; row < divider() && i < s.tree().size(); ++row, ++i) {
-                const auto &item = s.tree()[i];const auto &dir = s.directories()[item.path];const bool current = item.path == s.directory;
+                const auto &item = s.tree()[i];const Directory parentEntry;const auto &dir = item.parent ? parentEntry : s.directories()[item.path];const bool current = item.path == s.directory;
                 if (current && focused) fill(x + 1, row, area - 2, 3);
-                text(x + 1, row, String(dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
-                if (sizes) text(x + area - 15, row, sizes->value(item.path).label(), current && focused ? 3 : 2, 14);
+                text(x + 1, row, String(item.parent || dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
+                if (sizes && !item.parent) text(x + area - 15, row, sizes->value(item.path).label(), current && focused ? 3 : 2, 14);
                 if (current && !focused) text(x + 1, row, "►", 3, 1);
             }
             text(x, divider(), "├" + String(w - 2, Char(0x2500)) + "┤", 1, w);
@@ -818,7 +818,7 @@ class TerminalUI {
             else if (value == KEY_DOWN) locationIndex_ = std::min(std::max(0, int(locations_.size()) - 1), locationIndex_ + 1);
             else if (value == '/' || letter == 'p') openPrompt(Prompt::Path, value == '/' ? "/" : String());
             else if (value == KEY_F(5)) locations_ = mountedLocations();
-            else if ((value == 10 || value == KEY_ENTER) && !locations_.isEmpty()) selectRoot(locations_[locationIndex_].path);
+            else if ((value == 10 || value == 13 || value == KEY_ENTER) && !locations_.isEmpty()) selectRoot(locations_[locationIndex_].path);
             return;
         }
         if (value == AltLeft || value == AltRight || value == AltHome) {

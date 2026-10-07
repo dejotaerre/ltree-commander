@@ -257,7 +257,10 @@ void Session::rebuild(bool preserveFile)
     branchSizeDirty_=true;
     const String selected = preserveFile && currentFile() ? currentFile()->path : String{};
     tree_.clear();
-    appendTree(root, {}, true, true);
+    const String parentPath = FileInfo(root).absolutePath();
+    const bool hasParent = root != parentPath;
+    if (hasParent) tree_.append({parentPath, {}, parentPath, true});
+    appendTree(root, {}, true, !hasParent);
     scope_.clear();
     for (const auto &dir : directories_) {
         const bool include = view == View::Global || view == View::Showall ||
@@ -277,6 +280,13 @@ void Session::rebuild(bool preserveFile)
 void Session::selectDirectory(const String &path)
 {
     clearCompareFilter();
+    if (path != root && path == FileInfo(root).absolutePath()) {
+        Directory parent;
+        parent.path = path;
+        parent.children.append(root);
+        directories_.insert(path, parent);
+        root = path;
+    }
     if (!directories_.contains(path)) return;
     directory = path;
     fileIndex = 0;
@@ -349,7 +359,7 @@ void Session::move(int delta)
     } else fileIndex = std::clamp(fileIndex + delta, 0, std::max(0, int(files_.size()) - 1));
 }
 
-void Session::first() { move(-int(tree_.size()) - int(files_.size())); }
+void Session::first() { if (view == View::Tree) selectDirectory(root); else move(-int(files_.size())); }
 void Session::last() { move(int(tree_.size()) + int(files_.size())); }
 
 void Session::parent(bool allowRoot)

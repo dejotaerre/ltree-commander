@@ -168,6 +168,28 @@ void operations(const String &root) {
     session.enter(View::Branch);
     session.setTag(true, true);
     check(session.files().size() == 2 && session.tags.size() == 2, "branch and tagging");
+    Session navigation(root + "/branch");
+    navigation.apply(scanDirectories(root + "/branch", true, cancel), false);
+    navigation.tags.insert(source);
+    navigation.filespec.set("*.txt");
+    check(navigation.tree().first().parent && navigation.tree().first().path == root,
+          "parent row displays the actual parent path");
+    check(navigation.tree().first().name == root && navigation.tree()[1].name == "branch" &&
+              navigation.tree()[1].prefix == "└─" && navigation.tree()[2].prefix == "  └─",
+          "parent and current directory display their tree hierarchy");
+    navigation.first();
+    check(navigation.directory == root + "/branch", "Home retains current tree root");
+    navigation.move(-1);
+    check(navigation.root == root && navigation.directory == root && !navigation.currentDirectory().loaded,
+          "selecting parent expands the tree without logging it");
+    check(navigation.directories().value(root + "/branch").loaded && navigation.tags.contains(source) &&
+              navigation.filespec.text() == "*.txt", "parent selection preserves branch tags and filter");
+    navigation.apply(scanDirectories(root, false, cancel), true);
+    check(navigation.currentDirectory().loaded && navigation.directories().value(root + "/branch/sub").loaded,
+          "logging parent retains loaded descendants");
+    Session filesystem("/");
+    check(!filesystem.tree().first().parent && filesystem.tree().size() == 1,
+          "filesystem root has no parent row");
     Filespec spec;
     check(spec.set("*.txt") && spec.matches("a.txt") && !spec.matches("a.bin"), "filespec filter");
     check(spec.set("*.txt,-b.*") && spec.matches("a.txt") && !spec.matches("b.txt"), "filespec exclusions");

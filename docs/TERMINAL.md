@@ -31,6 +31,7 @@ Some traditional terminals send identical bytes for Ctrl+I/Tab, Ctrl+M/Enter and
 | Alt files | C/M Copy/Move tagged files with paths, I Information, K/F4 Comparison filter, F Display, S Sort, V Alternative viewer |
 
 - `+` logs the selected directory; `*` logs its branch; `-` unlogs. F3 refreshes; Alt+F3 relogs. Tree F5/F6 collapse controls remain available.
+- The tree shows the actual parent path above its current root, with the current folder indented as its child. Up or a mouse click selects that parent and keeps the loaded branch, tags and filter. Enter reads/opens the selected parent; `/` has no parent entry. Home still selects the current tree root.
 - Enter switches tree/file views and opens archives. Backspace returns to the tree/parent, including from an empty file list.
 - F8 splits the display; Tab changes panes. Shift+F8 offers swapping and statistics panel preferences. Ctrl+F6 combines tags. Ctrl+F7/F8/F9 tag, untag or invert the tree branch.
 - L selects a mounted location or typed path; `<`/`>` and comma/period cycle registered roots, retaining their state. Tab/Shift+Tab select sibling directories in a single tree pane; Ctrl+Tab works when its distinct sequence is available.

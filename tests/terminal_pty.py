@@ -136,9 +136,38 @@ def independent_instances():
   if gui is not None and gui.poll() is None:gui.terminate();gui.wait(timeout=5)
   log.close();shutil.rmtree(runtime)
 
+def parent_row():
+ a=App('parent-row',{'child/file.txt':b'safe','top.txt':b'kept'})
+ try:
+  a.check('Tree displays actual parent and child hierarchy',''.join(a.screen.grid[2]).split('│')[1].strip()==str(a.root.parent) and '└─root' in ''.join(a.screen.grid[3]))
+  a.send('t');a.send(HOME);a.send(F8);a.send(UP)
+  a.check('Up selects parent while retaining the loaded branch',a.screen.text().splitlines()[0][:a.screen.cols//2].strip()==str(a.root.parent) and 'child' in a.screen.text() and 'Tagged 1' in a.screen.text())
+  a.send('\r',.4);a.check('Enter logs selected parent','Directory not logged' not in a.screen.text() and 'home' in a.screen.text())
+  a.send('\x1b');a.send('\t');a.check('Opposite panel retains initial selection',a.screen.text().splitlines()[0].count(str(a.root))>=1)
+  a.send(F8);a.send('l');a.wait('LOCATIONS');a.send('\r',.4)
+  a.check('Filesystem root has no duplicate parent entry',''.join(a.screen.grid[2]).split('│')[1].strip()=='/' and ''.join(a.screen.grid[3]).split('│')[1].strip()!='/')
+ finally:a.close()
+
+
+def locations_enter():
+ for name,enter,protocol in [('return','\r',False),('newline','\n',False),('keypad',b'\x1bOM',False),('kitty','\x1b[13;1:1u',True),('kitty-keypad','\x1b[57414;1:1u',True)]:
+  a=App('locations-'+name,{'fixture.txt':b'safe'})
+  try:
+   if protocol:a.send('\x1b[?0u\x1b[?1;2c')
+   for command,title in [('l','LOCATIONS —'),('a','AVAILABLE SPACE —')]:
+    a.send(command);a.wait(title)
+    a.send(enter,.4)
+    a.check(title+' opens selected mount with '+name,title not in a.screen.text() and '<TREE:' in a.screen.text())
+    a.send('l');a.wait('LOCATIONS —');a.send('/');a.wait('LOG path:');a.send('\x15'+str(a.root)+'\r',.4)
+    a.check(title+' typed path restores fixture with '+name,'LOCATIONS —' not in a.screen.text() and str(a.root) in a.screen.text() and 'fixture' in a.screen.text())
+  finally:a.close()
+
+
 def main():
  a=None
  try:
+  parent_row()
+  locations_enter()
   independent_instances()
   a=App('transfers',{'a.txt':b'needle\n','b.txt':b'other\n','c.txt':b'third\n'})
   a.check('Tree A is Avail', 'Avail' in a.screen.text());a.send('a');a.check('Capacity displayed', 'Capacity' in a.screen.text());a.send('\x1b');a.send('\r')

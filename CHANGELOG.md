@@ -9,6 +9,15 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Selectable parent directory — 2026-10-06
+
+- Graphical and terminal trees show the actual parent path above the current root, with the current folder and its descendants indented as children. Selecting it expands the tree while retaining loaded descendants, tags and Filespec. The parent is read on opening/logging. `/` has no parent entry; Home retains its current-root shortcut.
+
+### Terminal location selection — 2026-10-06
+
+- Enter opens the selected mount in Locations and Available Space when the terminal sends carriage return, including Kitty all-key events and keypad Enter. Existing newline and ncurses Enter behavior remains supported.
+- PTY coverage checks all Enter encodings and returning through the typed-path prompt.
+
 ### Terminal-only build without Qt — 2026-10-06
 
 - `LTREE_BUILD_GUI=OFF` builds and runs without Qt, QTermWidget or the graphical font toolchain. Both interfaces remain enabled in the default build.

@@ -536,6 +536,8 @@ The terminal interface uses the same filesystem engines as the graphical interfa
 : E / O (file list) | Edit with the system editor; binary files use internal Hex editing.
 : X | Run a command or open a shell in the selected directory, then return.
 
+The tree shows a selectable parent folder above its root, with the current folder indented as its child. Up or a mouse click selects the parent while keeping loaded descendants, tags and Filespec. Enter reads and opens that folder. There is no parent row at /. Home selects the current tree root.
+
 = TERMINAL KEY TRANSPORT
 Kitty's extended keyboard protocol is detected automatically, including over SSH. Hold Ctrl or Alt to display its command menu; release it to restore the normal menu. Modifier release events never run commands. External editors and shells receive the previous keyboard mode.
 

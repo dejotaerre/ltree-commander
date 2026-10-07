@@ -696,14 +696,15 @@ void TreeWindow::drawPane(QPainter &p)
         for (int y = 2, i = treeTop_; y < split && i < session_.tree().size(); ++y, ++i) {
             const auto &row = session_.tree()[i];
             const auto found = session_.directories().constFind(row.path);
-            const auto &dir = found.value();
+            const Directory parentEntry;
+            const auto &dir = row.parent ? parentEntry : found.value();
             const bool selected = row.path == session_.directory;
             if (selected && paintingActive_) p.fillRect(cellWidth_, y * cellHeight_, (right - 1) * cellWidth_, cellHeight_, white);
-            QString state = dir.loaded ? " " : "+";
+            QString state = row.parent || dir.loaded ? " " : "+";
             if (dir.collapsed && !dir.children.isEmpty()) state = dir.loaded ? "·" : ":";
             const QColor ink=selected && paintingActive_?Qt::black:yellow;
             drawText(p, 1, y, state + row.prefix + row.name, ink, sizes?right-sizeWidth-2:right-1);
-            if(sizes)drawText(p,right-sizeWidth,y,sizes->value(row.path).label(sizeWidth),ink,sizeWidth);
+            if(sizes && !row.parent)drawText(p,right-sizeWidth,y,sizes->value(row.path).label(sizeWidth),ink,sizeWidth);
             if (selected && !paintingActive_) {
                 p.fillRect(cellWidth_, y * cellHeight_, cellWidth_, cellHeight_, white);
                 drawText(p, 1, y, state == " " ? "►" : state, Qt::black, 1);
