@@ -1,32 +1,32 @@
 struct History {
-  QStringList entries;
-  QMap<QString, QString> marks;
+  StringList entries;
+  Map<String, String> marks;
 };
-QMap<QString, History> histories_;
-QMap<QString, Pane> roots_;
+Map<String, History> histories_;
+Map<String, Pane> roots_;
 std::optional<Pane> globalReturn_;
 bool info_ = false, inArchive_ = false, avail_ = false;
-QStringList viewPaths_;
+StringList viewPaths_;
 int viewSequenceIndex_ = 0, extensionWidth_ = 9, statisticsMode_ = 0;
 SearchOptions rememberedSearch_;
-QString historyDirectory() const {
-  const auto override = qEnvironmentVariable("LTREE_HISTORY_FILE");
-  return override.isEmpty() ? QStandardPaths::writableLocation(
-                                  QStandardPaths::GenericConfigLocation) +
+String historyDirectory() const {
+  const auto override = environment("LTREE_HISTORY_FILE");
+  return override.isEmpty() ? Paths::writableLocation(
+                                  Paths::GenericConfigLocation) +
                                   "/ltreec"
-                            : QFileInfo(override).absolutePath();
+                            : FileInfo(override).absolutePath();
 }
-QString historyPath(const QString &key) const {
-  const auto override = qEnvironmentVariable("LTREE_HISTORY_FILE");
+String historyPath(const String &key) const {
+  const auto override = environment("LTREE_HISTORY_FILE");
   return key == "search" && !override.isEmpty()
              ? override
              : historyDirectory() + "/" + key + "-history.json";
 }
-void readHistory(const QString &key) {
-  QFile file(historyPath(key));
-  if (!file.open(QIODevice::ReadOnly))
+void readHistory(const String &key) {
+  File file(historyPath(key));
+  if (!file.open(IO::ReadOnly))
     return;
-  const auto object = QJsonDocument::fromJson(file.readAll()).object();
+  const auto object = JsonDocument::fromJson(file.readAll()).object();
   if (object.value("version").toInt() != 1)
     return;
   History value;
@@ -34,7 +34,7 @@ void readHistory(const QString &key) {
     const auto text = entry.isString()
                           ? entry.toString()
                           : entry.toObject().value("text").toString();
-    if (text.isEmpty() || text.contains(QChar(0)) || text.contains('\n') ||
+    if (text.isEmpty() || text.contains(Char(0)) || text.contains('\n') ||
         text.size() > 4096 || value.entries.contains(text))
       continue;
     value.entries.append(text);
@@ -42,24 +42,24 @@ void readHistory(const QString &key) {
   }
   histories_[key] = value;
 }
-void saveHistory(const QString &key) {
-  QDir().mkpath(historyDirectory());
-  QJsonArray entries;
+void saveHistory(const String &key) {
+  DirectoryPath().mkpath(historyDirectory());
+  JsonArray entries;
   for (const auto &entry : histories_[key].entries)
-    entries.append(QJsonObject{{"text", entry},
+    entries.append(JsonObject{{"text", entry},
                                {"mark", histories_[key].marks.value(entry)}});
-  QSaveFile file(historyPath(key));
-  if (!file.open(QIODevice::WriteOnly)) {
+  SaveFile file(historyPath(key));
+  if (!file.open(IO::WriteOnly)) {
     status_ = file.errorString();
     return;
   }
-  file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+  file.setPermissions(File::ReadOwner | File::WriteOwner);
   const auto bytes =
-      QJsonDocument(QJsonObject{{"version", 1}, {key, entries}}).toJson();
+      JsonDocument(JsonObject{{"version", 1}, {key, entries}}).toJson();
   if (file.write(bytes) != bytes.size() || !file.commit())
     status_ = file.errorString();
 }
-void remember(const QString &key, const QString &value) {
+void remember(const String &key, const String &value) {
   if (value.isEmpty())
     return;
   auto &history = histories_[key];
@@ -77,14 +77,14 @@ void remember(const QString &key, const QString &value) {
 }
 void initializeTerminalHistories() {
   for (const auto &key :
-       QStringList{"search", "filespec", "stamp", "graft", "gather"})
+       StringList{"search", "filespec", "stamp", "graft", "gather"})
     readHistory(key);
-  QFile viewer(historyDirectory() + "/viewer-history.json");
-  if (viewer.open(QIODevice::ReadOnly)) {
-    const auto object = QJsonDocument::fromJson(viewer.readAll()).object();
-    for (const auto &key : QStringList{"search", "gather"})
+  File viewer(historyDirectory() + "/viewer-history.json");
+  if (viewer.open(IO::ReadOnly)) {
+    const auto object = JsonDocument::fromJson(viewer.readAll()).object();
+    for (const auto &key : StringList{"search", "gather"})
       for (const auto &entry : object.value(key).toArray()) {
-        QString text = entry.toString();
+        String text = entry.toString();
         if (!text.isEmpty() && !histories_[key].entries.contains(text))
           histories_[key].entries.append(text);
       }
@@ -95,13 +95,13 @@ void initializeTerminalHistories() {
 void saveTerminalHistories() {
 
   for (const auto &key :
-       QStringList{"search", "filespec", "stamp", "graft", "gather"})
+       StringList{"search", "filespec", "stamp", "graft", "gather"})
     saveHistory(key);
   saveViewerHistory();
 }
 int nextKey(bool *literal = nullptr) {
   const auto input = keyboard_.read();
-  QCoreApplication::processEvents();
+  TerminalApplication::processEvents();
   if (stopped) return 27;
   if (!input) return -1;
   if (literal) *literal = input->literal;
@@ -110,16 +110,16 @@ int nextKey(bool *literal = nullptr) {
   if (input->control && value >= 'a' && value <= 'z') value -= 'a'-1;
   return input->alt ? 0x3000 + value : value;
 }
-std::optional<QString> historyPopup(const QString &key, const QString &draft) {
+std::optional<String> historyPopup(const String &key, const String &draft) {
   auto &history = histories_[key];
   int index = std::max(0, int(history.entries.size()) - 1), filter = 0,
       sort = 0;
-  QString notice;
+  String notice;
   while (!stopped) {
     draw();
     const int x = std::max(1, columns_ / 6), w = columns_ - x - 1,
               h = std::max(1, rows_ - 8);
-    QStringList items;
+    StringList items;
     for (auto it = history.entries.crbegin(); it != history.entries.crend();
          ++it) {
       const auto mark = history.marks.value(*it);
@@ -133,10 +133,10 @@ std::optional<QString> historyPopup(const QString &key, const QString &draft) {
     }
     if (sort)
       std::stable_sort(items.begin(), items.end(),
-                       [&](const QString &a, const QString &b) {
+                       [&](const String &a, const String &b) {
                          auto first = sort <= 2 ? history.marks.value(a) : a,
                               second = sort <= 2 ? history.marks.value(b) : b;
-                         int order = first.compare(second, Qt::CaseInsensitive);
+                         int order = first.compare(second, TextOptions::CaseInsensitive);
                          return sort % 2 ? order < 0 : order > 0;
                        });
     index = std::clamp(index, 0, std::max(0, int(items.size()) - 1));
@@ -161,7 +161,7 @@ std::optional<QString> historyPopup(const QString &key, const QString &draft) {
              "Cancel");
     fill(x, rows_ - 2, w, 1);
     text(x, rows_ - 2,
-         notice.isEmpty() ? QString("Displayed items: %1  Filter: %2")
+         notice.isEmpty() ? String("Displayed items: %1  Filter: %2")
                                 .arg(items.size())
                                 .arg(filter)
                           : notice);
@@ -216,7 +216,7 @@ std::optional<QString> historyPopup(const QString &key, const QString &draft) {
       else if ((k >= 32 && k < 127) || (k > 0 && k < 27)) {
         if (k > 0 && k < 27)
           k += 'A' - 1;
-        const QString mark = QString(QChar(k)).toUpper();
+        const String mark = String(Char(k)).toUpper();
         for (const auto &entry : items)
           if (history.marks.value(entry) == mark)
             return entry;
@@ -227,10 +227,10 @@ std::optional<QString> historyPopup(const QString &key, const QString &draft) {
   }
   return {};
 }
-std::optional<QString>
-ask(const QString &label, QString input = {}, const QString &history = {},
-    const std::function<QString()> &options = {},
-    const std::function<bool(int, QString &)> &optionKey = {}) {
+std::optional<String>
+ask(const String &label, String input = {}, const String &history = {},
+    const std::function<String()> &options = {},
+    const std::function<bool(int, String &)> &optionKey = {}) {
   int cursor = input.size();
   bool selected = !input.isEmpty();
   while (!stopped) {
@@ -269,9 +269,9 @@ ask(const QString &label, QString input = {}, const QString &history = {},
       selected = true;
       continue;
     }
-    if (k == KEY_F(2) && (label.contains("to:", Qt::CaseInsensitive) ||
-                          label.contains("with", Qt::CaseInsensitive) ||
-                          label.contains("destination", Qt::CaseInsensitive))) {
+    if (k == KEY_F(2) && (label.contains("to:", TextOptions::CaseInsensitive) ||
+                          label.contains("with", TextOptions::CaseInsensitive) ||
+                          label.contains("destination", TextOptions::CaseInsensitive))) {
       auto chosen = browseDirectory(input);
       if (chosen) {
         input = *chosen;
@@ -333,14 +333,14 @@ ask(const QString &label, QString input = {}, const QString &history = {},
         selected = false;
       }
       const char32_t cp = k;
-      const auto added = QString::fromUcs4(&cp, 1);
+      const auto added = String::fromUcs4(&cp, 1);
       input.insert(cursor, added);
       cursor += added.size();
     }
   }
   return {};
 }
-int choose(const QString &title, const QStringList &choices, int index = 0) {
+int choose(const String &title, const StringList &choices, int index = 0) {
   while (!stopped) {
     draw();
     int h = std::max(1, rows_ - 7);
@@ -377,7 +377,7 @@ int choose(const QString &title, const QStringList &choices, int index = 0) {
   }
   return -1;
 }
-bool confirm(const QString &question) {
+bool confirm(const String &question) {
   while (!stopped) {
     draw();
     fill(0, rows_ - 2, columns_, 1);
@@ -393,17 +393,17 @@ bool confirm(const QString &question) {
   }
   return false;
 }
-template <class Function> auto task(const QString &label, Function function) {
+template <class Function> auto task(const String &label, Function function) {
   cancel_ = std::make_shared<std::atomic_bool>(false);
   const auto token = cancel_;
   auto future =
-      QtConcurrent::run([function, token] { return function(token); });
+      runAsync([function, token] { return function(token); });
   while (!future.isFinished()) {
     draw();
     fill(0, rows_ - 1, columns_, 1);
     commands(0, rows_ - 1,
-             QString("%1 %2 [Esc] Cancel")
-                 .arg(QString("|/-\\")[spinner_++ % 4])
+             String("%1 %2 [Esc] Cancel")
+                 .arg(String("|/-\\")[spinner_++ % 4])
                  .arg(label));
     wrefresh(stdscr);
     int k = nextKey();
@@ -412,8 +412,8 @@ template <class Function> auto task(const QString &label, Function function) {
   }
   return future.result();
 }
-QVector<FileEntry> targets(bool tagged) const {
-  QVector<FileEntry> files;
+Vector<FileEntry> targets(bool tagged) const {
+  Vector<FileEntry> files;
   auto &s = active_.session;
   if (tagged) {
     for (const auto &file : s.files())
@@ -423,16 +423,16 @@ QVector<FileEntry> targets(bool tagged) const {
     files.append(*s.currentFile());
   return files;
 }
-QString destination() const {
+String destination() const {
   return other_ ? other_->session.directory : active_.session.directory;
 }
-QString absolute(const QString &path) const {
-  QString p = path;
+String absolute(const String &path) const {
+  String p = path;
   if (p == "~")
-    p = QDir::homePath();
+    p = DirectoryPath::homePath();
   else if (p.startsWith("~/"))
-    p = QDir::homePath() + p.mid(1);
-  return QDir::cleanPath(QDir(active_.session.directory).absoluteFilePath(p));
+    p = DirectoryPath::homePath() + p.mid(1);
+  return DirectoryPath::cleanPath(DirectoryPath(active_.session.directory).absoluteFilePath(p));
 }
 void applyScan(const ScanResult &scan) {
   active_.session.apply(scan, true);
@@ -442,34 +442,34 @@ void applyScan(const ScanResult &scan) {
     it->session.apply(scan, true);
   invalidateAutoview();
 }
-void refreshDirectories(const QSet<QString> &directories) {
+void refreshDirectories(const Set<String> &directories) {
   const auto result =
       task("Refreshing panels", [directories](const Cancellation &cancel) {
         ScanResult scan;
         for (const auto &path : directories)
-          if (QFileInfo(path).isDir())
+          if (FileInfo(path).isDir())
             scan.directories +=
                 scanDirectories(path, false, cancel).directories;
         return scan;
       });
   applyScan(result);
 }
-int fileInk(const QString &name) const {
-  const auto ext = QFileInfo(name).suffix().toUpper();
-  if (QStringList{"COM", "EXE", "BAT", "BTM", "CMD", "VBS", "JS", "WSH", "SH"}
+int fileInk(const String &name) const {
+  const auto ext = FileInfo(name).suffix().toUpper();
+  if (StringList{"COM", "EXE", "BAT", "BTM", "CMD", "VBS", "JS", "WSH", "SH"}
           .contains(ext))
     return 4;
-  if (QStringList{"DLL", "DRV", "SYS", "SO"}.contains(ext))
+  if (StringList{"DLL", "DRV", "SYS", "SO"}.contains(ext))
     return 5;
-  if (QStringList{"C", "H", "CPP", "HPP", "MAK", "DEF"}.contains(ext))
+  if (StringList{"C", "H", "CPP", "HPP", "MAK", "DEF"}.contains(ext))
     return 6;
-  if (QStringList{"TXT", "DAT", "HLP", "ASC", "LOG", "DOC"}.contains(ext))
+  if (StringList{"TXT", "DAT", "HLP", "ASC", "LOG", "DOC"}.contains(ext))
     return 7;
   if (archiveName(name))
     return 8;
-  if (QStringList{"INI", "INF", "CFG"}.contains(ext))
+  if (StringList{"INI", "INF", "CFG"}.contains(ext))
     return 9;
-  if (QStringList{"TMP", "BAK"}.contains(ext))
+  if (StringList{"TMP", "BAK"}.contains(ext))
     return 10;
   return 2;
 }

@@ -1,7 +1,7 @@
 ArchiveCatalog archiveCatalog_;
-QString archivePath_, archiveDirectory_, archivePassword_;
-QSet<int> archiveTags_;
-QVector<int> archiveVisible_;
+String archivePath_, archiveDirectory_, archivePassword_;
+Set<int> archiveTags_;
+Vector<int> archiveVisible_;
 int archiveIndex_ = 0, archiveTop_ = 0;
 bool archiveBranch_ = false;
 Filespec archiveSpec_;
@@ -11,14 +11,14 @@ void rebuildArchive() {
     const auto &entry = archiveCatalog_.entries[i];
     if (!entry.safe || !entry.path.startsWith(archiveDirectory_))
       continue;
-    QString relative = entry.path.mid(archiveDirectory_.size());
+    String relative = entry.path.mid(archiveDirectory_.size());
     if (relative.isEmpty())
       continue;
     if (!archiveBranch_ &&
-        relative.remove(QRegularExpression("/$")).contains('/'))
+        relative.remove(Regex("/$")).contains('/'))
       continue;
     if (entry.directory ||
-        archiveSpec_.matches(QFileInfo(entry.path).fileName()))
+        archiveSpec_.matches(FileInfo(entry.path).fileName()))
       archiveVisible_.append(i);
   }
   archiveIndex_ = std::clamp(archiveIndex_, 0,
@@ -27,7 +27,7 @@ void rebuildArchive() {
 void drawArchive() {
   text(1, 0, archivePath_ + " / " + archiveDirectory_, 1, columns_ - 2);
   text(1, 1,
-       QString("<%1: %2> %3")
+       String("<%1: %2> %3")
            .arg(archiveBranch_ ? "branch" : "directory", archiveSpec_.text(),
                 archiveCatalog_.format),
        2);
@@ -47,12 +47,12 @@ void drawArchive() {
              entry.path.mid(archiveDirectory_.size()),
          pair, columns_ - 26);
     text(columns_ - 24, r + 2,
-         QString::number(entry.size).rightJustified(12) +
+         String::number(entry.size).rightJustified(12) +
              (entry.directory ? " DIR" : ""),
          pair, 23);
   }
   text(1, rows_ - 4,
-       QString("%1/%2 Tagged %3")
+       String("%1/%2 Tagged %3")
            .arg(archiveVisible_.isEmpty() ? 0 : archiveIndex_ + 1)
            .arg(archiveVisible_.size())
            .arg(archiveTags_.size()),
@@ -69,17 +69,17 @@ void drawArchive() {
            "Help [Esc] Return");
 }
 void synthesizeArchiveDirectories() {
-  QSet<QString> directories;
+  Set<String> directories;
   for (const auto &entry : archiveCatalog_.entries)
     if (entry.directory)
       directories.insert(entry.path.endsWith('/') ? entry.path
                                                   : entry.path + "/");
-  QVector<ArchiveEntry> parents;
+  Vector<ArchiveEntry> parents;
   int synthetic = -1;
   for (const auto &entry : archiveCatalog_.entries) {
-    QString directory = QFileInfo(entry.path).path();
+    String directory = FileInfo(entry.path).path();
     while (directory != "." && !directory.isEmpty()) {
-      QString name = directory + "/";
+      String name = directory + "/";
       if (!directories.contains(name)) {
         directories.insert(name);
         ArchiveEntry dir;
@@ -88,12 +88,12 @@ void synthesizeArchiveDirectories() {
         dir.directory = dir.safe = true;
         parents.append(dir);
       }
-      directory = QFileInfo(directory).path();
+      directory = FileInfo(directory).path();
     }
   }
   archiveCatalog_.entries = parents + archiveCatalog_.entries;
 }
-void archiveOpen(const QString &path, bool listing = false) {
+void archiveOpen(const String &path, bool listing = false) {
   auto catalog =
       task("Reading archive", [this, path](const Cancellation &cancel) {
         return listArchive(path, cancel, archivePassword_);
@@ -121,9 +121,9 @@ void archiveOpen(const QString &path, bool listing = false) {
   archiveBranch_ = false;
   archiveSpec_.set("*.*");
   if (listing) {
-    QString text;
+    String text;
     for (const auto &entry : catalog.entries)
-      text += QString("%1 %2 %3\n")
+      text += String("%1 %2 %3\n")
                   .arg(entry.directory ? "DIR" : "   ")
                   .arg(entry.size, 12)
                   .arg(entry.path);
@@ -180,7 +180,7 @@ void archiveOpen(const QString &path, bool listing = false) {
         auto dir = archiveDirectory_;
         dir.chop(1);
         int at = dir.lastIndexOf('/');
-        archiveDirectory_ = at < 0 ? QString() : dir.left(at + 1);
+        archiveDirectory_ = at < 0 ? String() : dir.left(at + 1);
         archiveIndex_ = 0;
         rebuildArchive();
       }
@@ -190,7 +190,7 @@ void archiveOpen(const QString &path, bool listing = false) {
     } else if (k == 'f' || k == 'F') {
       auto value = ask("FILESPEC: ", archiveSpec_.text(), "filespec");
       if (value) {
-        QString error;
+        String error;
         if (!archiveSpec_.set(*value, &error))
           status_ = error;
         rebuildArchive();
@@ -276,7 +276,7 @@ void archiveOpen(const QString &path, bool listing = false) {
   inArchive_ = false;
 }
 void archiveExtract(bool tagged, bool paths) {
-  QSet<int> entries = tagged ? archiveTags_ : QSet<int>{};
+  Set<int> entries = tagged ? archiveTags_ : Set<int>{};
   if (!tagged && !archiveVisible_.isEmpty())
     entries.insert(
         archiveCatalog_.entries[archiveVisible_[archiveIndex_]].index);
@@ -284,7 +284,7 @@ void archiveExtract(bool tagged, bool paths) {
     status_ = "No archive members selected";
     return;
   }
-  QSet<int> expanded;
+  Set<int> expanded;
   for (const auto &entry : archiveCatalog_.entries)
     if (entries.contains(entry.index)) {
       if (entry.directory) {
@@ -300,11 +300,11 @@ void archiveExtract(bool tagged, bool paths) {
   auto dest = ask(
       "EXTRACT to: ", destination(), {},
       [&] {
-        return QString("[F2] Preserve paths (%1) [F4] Replace (%2) [Enter] "
+        return String("[F2] Preserve paths (%1) [F4] Replace (%2) [Enter] "
                        "Extract [Esc] Cancel")
             .arg(paths ? "yes" : "no", replace ? "yes" : "no");
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k == KEY_F(2))
           paths = !paths;
         else if (k == KEY_F(4))
@@ -322,7 +322,7 @@ void archiveExtract(bool tagged, bool paths) {
              return extractArchive(archivePath_, entries, target, paths,
                                    replace, cancel, archivePassword_);
            });
-  QSet<QString> refresh{target};
+  Set<String> refresh{target};
   auto collect = [&](const Session &session) {
     for (auto it = session.directories().cbegin();
          it != session.directories().cend(); ++it)
@@ -335,7 +335,7 @@ void archiveExtract(bool tagged, bool paths) {
   for (const auto &pane : roots_)
     collect(pane.session);
   refreshDirectories(refresh);
-  status_ = QString("Extract: %1 completed; %2 failed; %3")
+  status_ = String("Extract: %1 completed; %2 failed; %3")
                 .arg(result.completed)
                 .arg(result.failed)
                 .arg(result.error);
@@ -345,7 +345,7 @@ void archiveSearch() {
   if (!searchPrompt(options))
     return;
   rememberedSearch_ = options;
-  QSet<int> hits;
+  Set<int> hits;
   int failed = 0, count = 0;
   auto candidates = archiveTags_;
   if (candidates.isEmpty())
@@ -359,7 +359,7 @@ void archiveSearch() {
       continue;
     archiveIndex_ = archiveVisible_.indexOf(i);
     auto bytes =
-        task(QString("Searching %1  Hits: %2").arg(entry.path).arg(count),
+        task(String("Searching %1  Hits: %2").arg(entry.path).arg(count),
              [this, entry](const Cancellation &cancel) {
                return readArchiveMember(archivePath_, entry.index, cancel,
                                         archivePassword_);
@@ -380,7 +380,7 @@ void archiveSearch() {
   }
   archiveTags_ = hits;
   status_ =
-      QString("Archive search: %1 hits; %2 errors").arg(count).arg(failed);
+      String("Archive search: %1 hits; %2 errors").arg(count).arg(failed);
 }
 void createArchiveCommand(bool tagged) {
   const auto files = targets(tagged);
@@ -392,29 +392,29 @@ void createArchiveCommand(bool tagged) {
   bool paths = true, replace = false;
   auto output = ask(
       "CREATE archive as: ",
-      QDir(destination())
-          .filePath(QFileInfo(active_.session.directory).fileName() + ".zip"),
+      DirectoryPath(destination())
+          .filePath(FileInfo(active_.session.directory).fileName() + ".zip"),
       {},
       [&] {
-        return QString("[F3] Format (%1) [F2] Preserve paths (%2) [F4] Replace "
+        return String("[F3] Format (%1) [F2] Preserve paths (%2) [F4] Replace "
                        "(%3) [Enter] Create [Esc] Cancel")
             .arg(archiveFormatName(format), paths ? "yes" : "no",
                  replace ? "yes" : "no");
       },
-      [&](int k, QString &name) {
+      [&](int k, String &name) {
         if (k == KEY_F(2))
           paths = !paths;
         else if (k == KEY_F(4))
           replace = !replace;
         else if (k == KEY_F(3)) {
-          QStringList formats;
+          StringList formats;
           for (int i = 0; i < 9; ++i)
             formats << archiveFormatName(ArchiveFormat(i));
           int selected = choose("Archive format", formats, int(format));
           if (selected >= 0) {
             const auto old = archiveFormatSuffix(format);
             format = ArchiveFormat(selected);
-            if (name.endsWith(old, Qt::CaseInsensitive))
+            if (name.endsWith(old, TextOptions::CaseInsensitive))
               name.chop(old.size());
             name += archiveFormatSuffix(format);
           }
@@ -433,10 +433,10 @@ void createArchiveCommand(bool tagged) {
     return;
   }
   const auto target = absolute(*output), base = active_.session.directory;
-  QStringList sources;
+  StringList sources;
   for (const auto &file : files)
     sources << file.path;
-  if (replace && QFileInfo::exists(target) &&
+  if (replace && FileInfo::exists(target) &&
       !confirm("Replace archive " + target + "?"))
     return;
   auto result = task("Creating " + archiveFormatName(format),
@@ -444,8 +444,8 @@ void createArchiveCommand(bool tagged) {
                        return createArchive(sources, base, target, format,
                                             paths, replace, cancel);
                      });
-  refreshDirectories({QFileInfo(target).absolutePath()});
-  status_ = QString("Archive: %1 completed; %2")
+  refreshDirectories({FileInfo(target).absolutePath()});
+  status_ = String("Archive: %1 completed; %2")
                 .arg(result.completed)
                 .arg(result.error);
 }

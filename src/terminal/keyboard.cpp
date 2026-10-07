@@ -1,3 +1,4 @@
+#include "platform/platform.h"
 #include "terminal/keyboard.h"
 #include <cstdio>
 #include <cwchar>
@@ -75,7 +76,7 @@ TerminalInput normalize(int key, int mods, bool literal) {
     return {key, alt, control, literal && !control};
 }
 }
-std::optional<KeyboardEvent> decodeKeyboard(const QByteArray &s) {
+std::optional<KeyboardEvent> decodeKeyboard(const Bytes &s) {
     if (s.size() < 2 || s.size() > 512 || !s.startsWith("[")) return {};
     KeyboardEvent e;e.final = s.back();
     if (s.startsWith("[?") && e.final == 'u') {
@@ -83,10 +84,10 @@ std::optional<KeyboardEvent> decodeKeyboard(const QByteArray &s) {
         if (!ok || flags < 0 || flags > 31) return {};
         e.reply = true;e.code = flags;return e;
     }
-    if (!QByteArray("u~ABCDHFPQRS").contains(e.final)) return {};
+    if (!Bytes("u~ABCDHFPQRS").contains(e.final)) return {};
     const auto fields = s.mid(1, s.size()-2).split(';');
     if (fields.size() > 3) return {};
-    auto numbers = [](const QByteArray &field, QVector<int> &out) {
+    auto numbers = [](const Bytes &field, Vector<int> &out) {
         if (field.isEmpty()) return true;
         for (const auto &part : field.split(':')) {
             if (part.isEmpty()) { out.append(-1);continue; }
@@ -95,7 +96,7 @@ std::optional<KeyboardEvent> decodeKeyboard(const QByteArray &s) {
         }
         return true;
     };
-    QVector<int> keys, mods;
+    Vector<int> keys, mods;
     if (!numbers(fields[0], keys) || keys.size() > 3) return {};
     if (keys.isEmpty() && e.final != 'u' && e.final != '~') keys.append(1);
     if (keys.isEmpty() || !scalar(keys[0])) return {};

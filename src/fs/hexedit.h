@@ -1,8 +1,7 @@
 #pragma once
-#include <QString>
-#include <QByteArray>
+#include "platform/platform.h"
 namespace ltree {
-struct HexSnapshot { quint64 device=0,inode=0; qint64 changedSeconds=0,changedNanos=0; bool valid=false; bool operator==(const HexSnapshot &) const = default; };
-HexSnapshot hexSnapshot(const QString &path);
-QString saveHexPage(const QString &path,const HexSnapshot &expected,const QByteArray &original,qsizetype offset,const QByteArray &page);
+struct HexSnapshot { uint64 device=0,inode=0; int64 changedSeconds=0,changedNanos=0; bool valid=false; bool operator==(const HexSnapshot &) const = default; };
+HexSnapshot hexSnapshot(const String &path);
+String saveHexPage(const String &path,const HexSnapshot &expected,const Bytes &original,Index offset,const Bytes &page);
 }

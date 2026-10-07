@@ -378,7 +378,7 @@ Las capturas de prueba están en `docs/capturas-pruebas/` (ignoradas por Git). L
 
 ## Próximo incremento
 
-Cierre funcional alpha 0.1: filtros/marcado por rama, comparación de directorios, Ctrl+A y R/Ctrl+R incorporados. Preparación de publicación en ALPHA.md; código propio bajo licencia MIT. Recursión de permisos, tolerancias y máscaras avanzadas siguen como ampliaciones posteriores, junto al resto del inventario. Regex está incorporado como mejora opcional por línea.
+Cierre funcional alpha 0.1: filtros/marcado por rama, comparación de directorios, Ctrl+A y R/Ctrl+R incorporados. Preparación de publicación en ALPHA.md; código propio bajo licencia GPL-3.0-or-later desde el 2026-10-06 (las revisiones anteriores publicadas bajo MIT conservan esa licencia). Recursión de permisos, tolerancias y máscaras avanzadas siguen como ampliaciones posteriores, junto al resto del inventario. Regex está incorporado como mejora opcional por línea.
 
 
 ## Información Alt+I y permisos Alt+A en Linux

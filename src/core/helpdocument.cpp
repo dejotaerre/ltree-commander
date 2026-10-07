@@ -1,9 +1,10 @@
+#include "platform/platform.h"
 #include "core/helpdocument.h"
 #include <algorithm>
 
 namespace ltree {
 namespace {
-QVector<HelpSection> manual()
+Vector<HelpSection> manual()
 {
     return {
 {HelpTopic::Display, "Main display", R"HELP(
@@ -507,7 +508,7 @@ Screen size uses Qt logical pixels, including on Wayland. Session and desktop in
 )HELP"}
     };
 }
-QVector<HelpSection> terminalManual()
+Vector<HelpSection> terminalManual()
 {
     auto sections=manual();
     sections.append({HelpTopic::Terminal, "Terminal workspace and keyboard", R"HELP(
@@ -619,9 +620,9 @@ Previously saved pages stay saved. Saving verifies file identity and original co
 )HELP"});
     return sections;
 }
-QStringList wrap(QString text, int width)
+StringList wrap(String text, int width)
 {
-    QStringList result;
+    StringList result;
     while (text.size() > width) {
         int cut = text.lastIndexOf(' ', width);
         if (cut <= 0) cut = width;
@@ -642,25 +643,25 @@ void HelpDocument::open(HelpTopic topic)
     for (int i = 0; i < sections_.size(); ++i) if (sections_[i].id == topic) section_ = i;
     selected_ = section_; top_ = 0; match_ = -1; finding_ = false; notice_.clear();
 }
-QString HelpDocument::title() const
+String HelpDocument::title() const
 {
-    return index() ? "Contents" : QString("%1. %2").arg(section_ + 1).arg(sections_[section_].title);
+    return index() ? "Contents" : String("%1. %2").arg(section_ + 1).arg(sections_[section_].title);
 }
-QVector<HelpLine> HelpDocument::lines(int width) const
+Vector<HelpLine> HelpDocument::lines(int width) const
 {
     width = std::max(8, width);
-    QVector<HelpLine> result;
+    Vector<HelpLine> result;
     if (index()) {
         result.append({"CONTENTS", HelpStyle::Heading});
         result.append({""});
         for (int i = 0; i < sections_.size(); ++i)
-            result.append({QString("%1. %2").arg(i + 1, 2).arg(sections_[i].title).left(width)});
+            result.append({String("%1. %2").arg(i + 1, 2).arg(sections_[i].title).left(width)});
         result.append({""});
         for (const auto &line : wrap("Choose a chapter with Up/Down and Enter. Left/Right reads adjacent chapters. F searches the entire manual.", width)) result.append({line});
         return result;
     }
     bool diagram = false;
-    for (QString line : sections_[section_].body.trimmed().split('\n')) {
+    for (String line : sections_[section_].body.trimmed().split('\n')) {
         if (line == "```") { diagram = !diagram; continue; }
         if (diagram) {
             if (width >= 48) result.append({line.left(width), HelpStyle::Diagram});
@@ -673,12 +674,12 @@ QVector<HelpLine> HelpDocument::lines(int width) const
         if (line.startsWith(": ")) {
             line.remove(0, 2);
             const int separator = line.indexOf(" | ");
-            const QString keys = line.left(separator), description = line.mid(separator + 3);
+            const String keys = line.left(separator), description = line.mid(separator + 3);
             const int labelWidth = std::min(22, width / 3);
             if (keys.size() < labelWidth) {
                 const auto parts = wrap(description, width - labelWidth);
                 for (int i = 0; i < parts.size(); ++i)
-                    result.append({(i ? QString(labelWidth, ' ') : keys.leftJustified(labelWidth)) + parts[i], HelpStyle::Keys, i ? 0 : int(keys.size())});
+                    result.append({(i ? String(labelWidth, ' ') : keys.leftJustified(labelWidth)) + parts[i], HelpStyle::Keys, i ? 0 : int(keys.size())});
             } else {
                 for (const auto &part : wrap(keys, width)) result.append({part, HelpStyle::Keys, int(part.size())});
                 for (const auto &part : wrap(description, width - 2)) result.append({"  " + part});
@@ -712,14 +713,14 @@ void HelpDocument::find(int width, int height, bool next)
         const int begin = pass == 0 ? startRow : 0;
         const int end = pass == sections_.size() ? std::min(startRow, int(content.size())) : int(content.size());
         for (int row = begin; row < end; ++row) {
-            if (content[row].text.contains(query_, Qt::CaseInsensitive)) {
+            if (content[row].text.contains(query_, TextOptions::CaseInsensitive)) {
                 match_ = top_ = row; selected_ = section_; notice_ = "Found: " + query_; constrain(width, height); return;
             }
         }
     }
     section_ = original; top_ = previousTop; match_ = -1; notice_ = "No match: " + query_; constrain(width, height);
 }
-bool HelpDocument::act(HelpAction action, int width, int height, const QString &text)
+bool HelpDocument::act(HelpAction action, int width, int height, const String &text)
 {
     height = std::max(1, height);
     if (finding_) {

@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/scanner.h"
 
 namespace ltree {
@@ -9,6 +10,6 @@ struct SortOptions {
     bool pathFirst = false;
     bool operator==(const SortOptions &) const = default;
 };
-QString sortLabel(const SortOptions &);
-void sortFiles(QVector<FileEntry> &, const SortOptions &, bool aggregate);
+String sortLabel(const SortOptions &);
+void sortFiles(Vector<FileEntry> &, const SortOptions &, bool aggregate);
 }

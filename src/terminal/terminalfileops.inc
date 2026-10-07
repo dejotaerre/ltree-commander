@@ -8,15 +8,15 @@ void transfer(bool move, bool tagged, bool paths) {
   CopyCase letterCase = CopyCase::Keep;
   CopyReplace replace = CopyReplace::Ask;
   auto mask = ask(
-      QString("%1 %2 file(s) as: ")
+      String("%1 %2 file(s) as: ")
           .arg(move ? "MOVE" : "COPY")
           .arg(files.size()),
       "*.*", {},
       [&] {
-        return QString("[Enter] Filename mask [Tab] Case (%1) [Esc] Cancel")
-            .arg(QStringList{"Keep", "Lower", "Upper"}[int(letterCase)]);
+        return String("[Enter] Filename mask [Tab] Case (%1) [Esc] Cancel")
+            .arg(StringList{"Keep", "Lower", "Upper"}[int(letterCase)]);
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k != 9)
           return false;
         letterCase = CopyCase((int(letterCase) + 1) % 3);
@@ -48,14 +48,14 @@ void transfer(bool move, bool tagged, bool paths) {
     status_ = plan.error;
     return;
   }
-  if (!confirm(QString("%1 %2 file(s) to %3?")
+  if (!confirm(String("%1 %2 file(s) to %3?")
                    .arg(move ? "Move" : "Copy")
                    .arg(plan.entries.size())
                    .arg(absolute(*dest))))
     return;
   const bool each = tagged && confirm("Confirm copy/move for each file?");
   int done = 0, failed = 0, skipped = 0;
-  QSet<QString> dirs;
+  Set<String> dirs;
   for (const auto &entry : plan.entries) {
     if (stopped)
       break;
@@ -96,8 +96,8 @@ void transfer(bool move, bool tagged, bool paths) {
         }
       } else if (result.copied || result.moved) {
         ++done;
-        dirs.insert(QFileInfo(entry.source).absolutePath());
-        dirs.insert(QFileInfo(result.target).absolutePath());
+        dirs.insert(FileInfo(entry.source).absolutePath());
+        dirs.insert(FileInfo(result.target).absolutePath());
         if (move) {
           active_.session.removeFile(entry.source);
           if (other_)
@@ -110,7 +110,7 @@ void transfer(bool move, bool tagged, bool paths) {
     }
   }
   refreshDirectories(dirs);
-  status_ = QString("%1: %2 completed; %3 skipped; %4 failed")
+  status_ = String("%1: %2 completed; %3 skipped; %4 failed")
                 .arg(move ? "Move" : "Copy")
                 .arg(done)
                 .arg(skipped)
@@ -127,11 +127,11 @@ void removeItems(bool tagged) {
     return;
   }
   if (!confirm(tree ? "Delete empty directory " + branch + "?"
-                    : QString("Delete %1 file(s)?").arg(files.size())))
+                    : String("Delete %1 file(s)?").arg(files.size())))
     return;
   const bool each = tagged && confirm("Confirm delete for each file?");
   int done = 0, failed = 0, skipped = 0;
-  QSet<QString> dirs;
+  Set<String> dirs;
   if (tree) {
     const auto result =
         task("Deleting " + branch, [=](const Cancellation &cancel) {
@@ -163,7 +163,7 @@ void removeItems(bool tagged) {
         s.removeFile(file.path);
         if (other_)
           other_->session.removeFile(file.path);
-        dirs.insert(QFileInfo(file.path).absolutePath());
+        dirs.insert(FileInfo(file.path).absolutePath());
         applyScan(result.scan);
         break;
       }
@@ -204,7 +204,7 @@ void removeItems(bool tagged) {
     }
     s.returnToTree();
   }
-  status_ = QString("Delete: %1 deleted; %2 skipped; %3 failed")
+  status_ = String("Delete: %1 deleted; %2 skipped; %3 failed")
                 .arg(done)
                 .arg(skipped)
                 .arg(failed);
@@ -235,15 +235,15 @@ void renameCommand(bool tagged) {
   CopyCase letterCase = CopyCase::Keep;
   auto name = ask(
       "RENAME as: ",
-      tree     ? QFileInfo(s.directory).fileName()
+      tree     ? FileInfo(s.directory).fileName()
       : tagged ? "*.*"
                : files.first().name,
       {},
       [&] {
-        return QString("[Enter] OK [Tab] Case (%1) [Esc] Cancel")
-            .arg(QStringList{"Keep", "Lower", "Upper"}[int(letterCase)]);
+        return String("[Enter] OK [Tab] Case (%1) [Esc] Cancel")
+            .arg(StringList{"Keep", "Lower", "Upper"}[int(letterCase)]);
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k != 9)
           return false;
         letterCase = CopyCase((int(letterCase) + 1) % 3);
@@ -251,22 +251,22 @@ void renameCommand(bool tagged) {
       });
   if (!name)
     return;
-  QStringList paths;
+  StringList paths;
   if (tree)
     paths << s.directory;
   else
     for (const auto &file : files)
       paths << file.path;
-  if (!confirm(QString("Rename %1 item(s)?").arg(paths.size())))
+  if (!confirm(String("Rename %1 item(s)?").arg(paths.size())))
     return;
   const bool each = tagged && confirm("Confirm rename for each file?");
   int done = 0, failed = 0;
   for (const auto &path : paths) {
     if (each && !confirm("Rename " + path + "?"))
       continue;
-    QString error;
+    String error;
     auto target =
-        copyName(QFileInfo(path).fileName(), *name, letterCase, &error);
+        copyName(FileInfo(path).fileName(), *name, letterCase, &error);
     if (!error.isEmpty()) {
       status_ = error;
       ++failed;
@@ -300,29 +300,29 @@ void renameCommand(bool tagged) {
     }
   }
   if (failed == 0)
-    status_ = QString("Rename: %1 completed").arg(done);
+    status_ = String("Rename: %1 completed").arg(done);
 }
-void shellCommand(const QString &command = {}) {
-  auto executable = qEnvironmentVariable("SHELL", "/bin/bash");
-  QStringList args;
+void shellCommand(const String &command = {}) {
+  auto executable = environment("SHELL", "/bin/bash");
+  StringList args;
   if (!command.isEmpty())
     args = {"-c", command};
-  QProcess process;
-  process.setWorkingDirectory(viewer_ ? QFileInfo(viewerPath_).absolutePath()
+  Process process;
+  process.setWorkingDirectory(viewer_ ? FileInfo(viewerPath_).absolutePath()
                                       : active_.session.directory);
-  process.setProcessChannelMode(QProcess::ForwardedChannels);
-  process.setInputChannelMode(QProcess::ForwardedInputChannel);
+  process.setProcessChannelMode(Process::ForwardedChannels);
+  process.setInputChannelMode(Process::ForwardedInputChannel);
   process.setUnixProcessParameters(
-      QProcess::UnixProcessFlag::ResetSignalHandlers);
+      Process::UnixProcessFlag::ResetSignalHandlers);
   const auto prev = std::signal(SIGINT, SIG_IGN);
   keyboard_.suspend();
   def_prog_mode();
   endwin();
   process.start(executable, args);
   if (process.waitForStarted()) {
-    while (process.state() != QProcess::NotRunning) {
+    while (process.state() != Process::NotRunning) {
       process.waitForFinished(100);
-      QCoreApplication::processEvents();
+      TerminalApplication::processEvents();
       if (stopped) {
         process.terminate();
         if (!process.waitForFinished(3000))
@@ -334,18 +334,18 @@ void shellCommand(const QString &command = {}) {
   refresh();
   keyboard_.resume();
   std::signal(SIGINT, prev);
-  QSet<QString> dirs{active_.session.directory};
+  Set<String> dirs{active_.session.directory};
   if (other_)
     dirs.insert(other_->session.directory);
   refreshDirectories(dirs);
-  status_ = process.error() == QProcess::FailedToStart ? process.errorString()
+  status_ = process.error() == Process::FailedToStart ? process.errorString()
                                                        : "Shell finished";
 }
 void linkCommand() {
   auto source = readMetadata(active_.session.directory);
   auto dest =
       ask("SYMLINK destination: ",
-          QDir(destination()).filePath(QFileInfo(source.path).fileName()));
+          DirectoryPath(destination()).filePath(FileInfo(source.path).fileName()));
   if (!dest)
     return;
   auto result =
@@ -372,7 +372,7 @@ void graftCommand() {
     if (other_)
       other_->session.graftPath(result.source, result.target);
     applyScan(result.scan);
-    refreshDirectories({QFileInfo(source.path).absolutePath(), target.path});
+    refreshDirectories({FileInfo(source.path).absolutePath(), target.path});
     status_ = "Branch moved";
   } else
     status_ = result.error;
@@ -381,7 +381,7 @@ void pruneCommand() {
   PruneOptions options;
   auto root = active_.session.root;
   auto source = readMetadata(active_.session.directory);
-  QMap<QString, FileMetadata> logged;
+  Map<String, FileMetadata> logged;
   for (auto it = active_.session.directories().cbegin();
        it != active_.session.directories().cend(); ++it)
     if (it->loaded)
@@ -389,13 +389,13 @@ void pruneCommand() {
   auto word = ask(
       "Enter the word PRUNE: ", {}, {},
       [&] {
-        return QString("[F5] Keep files (%1) [F4] Trash (%2) [F6] Only empty "
+        return String("[F5] Keep files (%1) [F4] Trash (%2) [F6] Only empty "
                        "(%3) [F2] Force read-only (%4) [Esc] Cancel")
             .arg(options.keepCurrentFiles ? "yes" : "no",
                  options.trash ? "yes" : "no", options.onlyEmpty ? "yes" : "no",
                  options.forceReadOnly ? "yes" : "no");
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k == KEY_F(5))
           options.keepCurrentFiles = !options.keepCurrentFiles;
         else if (k == KEY_F(4))
@@ -428,7 +428,7 @@ void pruneCommand() {
       other_->session.removeDirectory(path);
   }
   applyScan(result.scan);
-  status_ = QString("Prune: %1 files; %2 directories; %3 retained %4")
+  status_ = String("Prune: %1 files; %2 directories; %3 retained %4")
                 .arg(result.removedFiles.size())
                 .arg(result.removedDirectories.size())
                 .arg(result.retained)
@@ -438,12 +438,12 @@ bool searchPrompt(SearchOptions &options) {
   auto query = ask(
       "SEARCH for: ", options.query, "search",
       [&] {
-        return QString("[F2] Case sensitive (%1) [F4] Search for (%2) [Enter] "
+        return String("[F2] Case sensitive (%1) [F4] Search for (%2) [Enter] "
                        "Search [↑↓] History [F3] Last [Esc] Cancel")
             .arg(options.caseSensitive ? "yes" : "no",
                  searchModeName(options.mode));
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k == KEY_F(2))
           options.caseSensitive = !options.caseSensitive;
         else if (k == KEY_F(4))
@@ -474,13 +474,13 @@ void batchSearch() {
   rememberedSearch_ = options;
   cancel_ = std::make_shared<std::atomic_bool>(false);
   const auto cancel = cancel_;
-  QElapsedTimer elapsed;
+  ElapsedTimer elapsed;
   elapsed.start();
-  qint64 completed = 0, total = 0, actual = 0;
+  int64 completed = 0, total = 0, actual = 0;
   int hits = 0, failed = 0, processed = 0;
-  QMap<int, bool> policies;
+  Map<int, bool> policies;
   for (const auto &file : files)
-    total += std::max(qint64(1), file.size);
+    total += std::max(int64(1), file.size);
   for (int index = 0; index < files.size() && !cancel->load(); ++index) {
     const auto file = files[index];
     for (int i = 0; i < active_.session.files().size(); ++i)
@@ -491,15 +491,15 @@ void batchSearch() {
     bool retry = true;
     while (retry && !cancel->load()) {
       retry = false;
-      auto bytes = std::make_shared<std::atomic<qint64>>(0);
-      auto future = QtConcurrent::run([=] {
+      auto bytes = std::make_shared<std::atomic<int64>>(0);
+      auto future = runAsync([=] {
         return searchFile(file.path, options, cancel,
-                          [bytes](qint64 n) { bytes->store(n); });
+                          [bytes](int64 n) { bytes->store(n); });
       });
       while (!future.isFinished()) {
-        qint64 read = bytes->load(),
+        int64 read = bytes->load(),
                position =
-                   completed + std::min(read, std::max(qint64(1), file.size));
+                   completed + std::min(read, std::max(int64(1), file.size));
         int percent = total ? std::min(100, int(position * 100 / total)) : 0;
         double seconds = std::max(0.001, elapsed.elapsed() / 1000.0),
                rate = (actual + read) / seconds;
@@ -507,25 +507,25 @@ void batchSearch() {
         for (int y = rows_ - 3; y < rows_; ++y)
           fill(0, y, columns_, 1);
         text(0, rows_ - 3,
-             QString("Searching for (%1): %2  Hits: %3")
+             String("Searching for (%1): %2  Hits: %3")
                  .arg(searchModeName(options.mode), options.query)
                  .arg(hits),
              2);
         text(0, rows_ - 2,
-             QString("%1 in file %2/%3: %4")
-                 .arg(QString("|/-\\")[spinner_++ % 4])
+             String("%1 in file %2/%3: %4")
+                 .arg(String("|/-\\")[spinner_++ % 4])
                  .arg(index + 1)
                  .arg(files.size())
                  .arg(file.path),
              1);
         text(0, rows_ - 1,
-             QString("%1 %2% Time: %3s Left: %4s (%5 MiB/s) Esc Cancel")
-                 .arg(QString(percent * std::min(20, columns_ / 6) / 100,
-                              QChar(0x2588))
+             String("%1 %2% Time: %3s Left: %4s (%5 MiB/s) Esc Cancel")
+                 .arg(String(percent * std::min(20, columns_ / 6) / 100,
+                              Char(0x2588))
                           .leftJustified(std::min(20, columns_ / 6)))
                  .arg(percent)
                  .arg(int(seconds))
-                 .arg(rate ? int(std::max(qint64(0), total - position) / rate)
+                 .arg(rate ? int(std::max(int64(0), total - position) / rate)
                            : 0)
                  .arg(rate / 1048576, 0, 'f', 2),
              1);
@@ -574,11 +574,11 @@ void batchSearch() {
     }
     if (!cancel->load()) {
       ++processed;
-      completed += std::max(qint64(1), file.size);
+      completed += std::max(int64(1), file.size);
     }
   }
   active_.session.rebuild();
-  status_ = QString("Search %1: %2/%3 processed; %4 hits; %5 errors")
+  status_ = String("Search %1: %2/%3 processed; %4 hits; %5 errors")
                 .arg(cancel->load() ? "cancelled" : "completed")
                 .arg(processed)
                 .arg(files.size())

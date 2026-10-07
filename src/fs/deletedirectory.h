@@ -1,17 +1,18 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/scanner.h"
 
 namespace ltree {
 struct DeleteResult {
-    QString path;
-    QString error;
+    String path;
+    String error;
     bool deleted = false;
     bool cancelled = false;
     bool directory = true;
     ScanResult scan;
-    QStringList removedDirectories;
+    StringList removedDirectories;
 };
-DeleteResult deleteEmptyDirectory(const QString &root, const QString &path, const Cancellation &cancel);
-DeleteResult deleteFile(const QString &root, const QString &path, const Cancellation &cancel);
-DeleteResult deleteEmptyBranch(const QString &root, const QString &path, const Cancellation &cancel);
+DeleteResult deleteEmptyDirectory(const String &root, const String &path, const Cancellation &cancel);
+DeleteResult deleteFile(const String &root, const String &path, const Cancellation &cancel);
+DeleteResult deleteEmptyBranch(const String &root, const String &path, const Cancellation &cancel);
 }

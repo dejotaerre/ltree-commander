@@ -1,11 +1,12 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/metadata.h"
 
 namespace ltree {
 struct SymlinkResult {
-    QString path, error;
+    String path, error;
     bool created = false, cancelled = false;
     ScanResult scan;
 };
-SymlinkResult createDirectoryLink(const FileMetadata &source, const QString &destination, const Cancellation &cancel);
+SymlinkResult createDirectoryLink(const FileMetadata &source, const String &destination, const Cancellation &cancel);
 }

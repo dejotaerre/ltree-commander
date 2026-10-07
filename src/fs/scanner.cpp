@@ -1,31 +1,29 @@
+#include "platform/platform.h"
 #include "fs/scanner.h"
 #include "fs/mounts.h"
-#include <QSet>
 
-#include <QDir>
-#include <QFileInfo>
 #include <algorithm>
 
 namespace ltree {
 
-bool isWithin(const QString &path, const QString &base)
+bool isWithin(const String &path, const String &base)
 {
     return path == base || path.startsWith(base.endsWith('/') ? base : base + '/');
 }
 
-ScanResult scanDirectories(const QString &path, bool recursive, const Cancellation &cancel, const QStringList &boundaries)
+ScanResult scanDirectories(const String &path, bool recursive, const Cancellation &cancel, const StringList &boundaries)
 {
     ScanResult result;
     const auto locations = mountedLocations(nullptr, true);
-    QSet<QString> mounts(boundaries.begin(), boundaries.end());
+    Set<String> mounts(boundaries.begin(), boundaries.end());
     if (recursive) for (const auto &mount : locations) mounts.insert(mount.path);
-    QStringList pending{path};
+    StringList pending{path};
     while (!pending.isEmpty()) {
         if (cancel->load()) { result.cancelled = true; break; }
-        const QString current = pending.takeLast();
+        const String current = pending.takeLast();
         DirectoryScan scan;
         scan.path = current;
-        const QFileInfo dirInfo(current);
+        const FileInfo dirInfo(current);
         if (dirInfo.isSymLink()) {
             scan.error = "Directory link: following links is not implemented yet";
         } else if (!dirInfo.isDir()) {
@@ -33,9 +31,9 @@ ScanResult scanDirectories(const QString &path, bool recursive, const Cancellati
         } else if (!dirInfo.isReadable() || !dirInfo.isExecutable()) {
             scan.error = "Access denied";
         } else {
-            const auto entries = QDir(current).entryInfoList(
-                QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
-                QDir::Unsorted);
+            const auto entries = DirectoryPath(current).entryInfoList(
+                DirectoryPath::AllEntries | DirectoryPath::Hidden | DirectoryPath::System | DirectoryPath::NoDotAndDotDot,
+                DirectoryPath::Unsorted);
             for (const auto &entry : entries) {
                 if (cancel->load()) { result.cancelled = true; break; }
                 if (entry.isDir()) {
@@ -52,7 +50,7 @@ ScanResult scanDirectories(const QString &path, bool recursive, const Cancellati
             if (result.cancelled) break;
             // El árbol conserva orden alfabético; los archivos retienen el orden de lectura para Unsorted.
             std::sort(scan.children.begin(), scan.children.end(), [](const auto &a,const auto &b) {
-                const int value=QString::compare(a,b,Qt::CaseInsensitive);
+                const int value=String::compare(a,b,TextOptions::CaseInsensitive);
                 return value?value<0:a<b;
             });
         }

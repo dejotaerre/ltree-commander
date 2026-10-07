@@ -5,7 +5,7 @@ First public source alpha of **LTree Commander**, a native Linux clone aiming to
 ## Release contents
 
 - C++20 / Qt 6 graphical file manager, optional ncurses terminal backend, tests, build tools, documentation and project icons.
-- MIT license for the original project work; dependencies retain their own terms. See [THIRD_PARTY.md](../THIRD_PARTY.md), particularly QTermWidget's GPL requirements when distributing combined executables.
+- [GNU GPL version 3 or later](../LICENSE) (`GPL-3.0-or-later`) for the original project work; dependencies retain their own terms. See [THIRD_PARTY.md](../THIRD_PARTY.md), particularly QTermWidget's GPL requirements when distributing combined executables.
 - Screenshots captured from the current graphical program using synthetic example files.
 - Sources only: no prebuilt executable, generated fonts, private manuals, reference screenshots, user configuration or original ZTree/XTree code.
 

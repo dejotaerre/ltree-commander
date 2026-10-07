@@ -1,13 +1,15 @@
-#include "ui/treewindow.h"
-#include "ui/windowgeometry.h"
+#include <QCoreApplication>
+#include <QCommandLineParser>
+#include <QFileInfo>
+#include <QDir>
 #ifdef LTREE_HAS_TERMINAL
 #include "terminal/terminalui.h"
 #endif
+#ifdef LTREE_HAS_GUI
+#include "ui/treewindow.h"
+#include "ui/windowgeometry.h"
 #include <QApplication>
-#include <QCommandLineParser>
 #include <QDesktopServices>
-#include <QFileInfo>
-#include <QDir>
 #include <QIcon>
 #include <QMessageBox>
 #include <QMimeDatabase>
@@ -18,6 +20,7 @@
 #include <QStandardPaths>
 #include <QThread>
 #include <QUrl>
+#endif
 #include <cstdio>
 #include <clocale>
 #include <memory>
@@ -25,26 +28,36 @@
 
 int main(int argc, char **argv)
 {
+#ifdef LTREE_HAS_GUI
     // Respetar también una plataforma Qt explícita, como offscreen en las pruebas.
     bool terminal = qEnvironmentVariableIsEmpty("DISPLAY") &&
         qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM");
     for (int i = 1; i < argc && std::strcmp(argv[i], "--") != 0; ++i)
         if (std::strcmp(argv[i], "--terminal") == 0) terminal = true;
+#else
+    const bool terminal = true;
+#endif
     // La ruta TUI no inicializa plugins gráficos ni requiere DISPLAY/Wayland.
     std::unique_ptr<QCoreApplication> app;
     if (terminal) app = std::make_unique<QCoreApplication>(argc, argv);
+#ifdef LTREE_HAS_GUI
     else app = std::make_unique<QApplication>(argc, argv);
+#endif
     // Mantener los diagnósticos del sistema en inglés sin cambiar el entorno de la consola X.
     std::setlocale(LC_MESSAGES, "C");
     QCoreApplication::setApplicationName("ltc");
+#ifdef LTREE_HAS_GUI
     if (!terminal) {
         QApplication::setApplicationDisplayName("LTree Commander");
         QApplication::setDesktopFileName("ltreec");
         QApplication::setWindowIcon(QIcon(":/icons/ltreec.png"));
     }
+#endif
     QCoreApplication::setApplicationVersion(LTREE_VERSION);
     QCommandLineParser parser;
-    parser.setApplicationDescription("LTree Commander: file manager for Linux. F1 shows available commands.");
+    parser.setApplicationDescription(terminal ?
+        "LTree Commander: terminal file manager for Linux. F1 shows available commands." :
+        "LTree Commander: file manager for Linux. F1 shows available commands.");
     parser.addHelpOption();
     parser.addVersionOption();
     parser.addPositionalArgument("directory", "Navigation root; defaults to home (GUI) or the current directory (terminal).");
@@ -69,6 +82,7 @@ int main(int argc, char **argv)
         std::fprintf(stderr,"This build does not include the terminal interface.\n");return 2;
 #endif
     }
+#ifdef LTREE_HAS_GUI
     const QString runtime=QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
     QLockFile instanceLock(runtime+"/ltreec.lock");
     instanceLock.setStaleLockTime(0);
@@ -145,4 +159,7 @@ int main(int argc, char **argv)
     });
     if (parser.isSet("fullscreen")) window.showFullScreen(); else window.show();
     return app->exec();
+#else
+    return 2;
+#endif
 }

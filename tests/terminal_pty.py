@@ -103,6 +103,23 @@ def independent_instances():
   first.wait('first-session');second.wait('second-session')
   first.check('Two terminals share runtime without new-instance',first.proc.poll() is None and second.proc.poll() is None)
   first.check('Terminal sessions create no GUI lock or socket',not(runtime/'ltreec.lock').exists() and not(runtime/'ltreec.socket').exists())
+  if os.environ.get('LTC_TEST_HAS_GUI','1')=='0':
+   desktop_env=second.env.copy();desktop_env.update(DISPLAY=':999',WAYLAND_DISPLAY='missing-wayland',QT_QPA_PLATFORM='missing-plugin')
+   master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,140,0,0))
+   desktop=None
+   try:
+    desktop=subprocess.Popen([os.environ['LTC_TEST_BINARY'],str(second.root)],env=desktop_env,stdin=slave,stdout=slave,stderr=slave)
+    os.close(slave);slave=-1;screen=Screen();deadline=time.monotonic()+5
+    while time.monotonic()<deadline and desktop.poll() is None:
+     if select.select([master],[],[],.05)[0]:screen.feed(os.read(master,65536))
+     if 'second-session' in screen.text():break
+    second.check('Terminal-only launch ignores graphical environment',desktop.poll() is None and 'second-session' in screen.text())
+   finally:
+    if desktop is not None and desktop.poll() is None:desktop.terminate();desktop.wait(timeout=5)
+    if slave>=0:os.close(slave)
+    os.close(master)
+   first.send('q');first.send('y');first.check('Closing one terminal keeps another running',first.proc.wait(timeout=5)==0 and second.proc.poll() is None)
+   return
   env=first.env.copy();env['QT_QPA_PLATFORM']='offscreen';binary=os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc')
   gui=subprocess.Popen([binary,str(first.root)],env=env,stdout=log,stderr=log)
   deadline=time.monotonic()+5

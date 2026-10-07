@@ -1,3 +1,4 @@
+#include "platform/platform.h"
 #include "terminal/terminalui.h"
 #include "terminal/editor.h"
 #include "terminal/keyboard.h"
@@ -20,25 +21,8 @@
 #include "fs/filecompare.h"
 #include "fs/systemstats.h"
 #include "ui/doschars.h"
-#include <QElapsedTimer>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QSaveFile>
-#include <QStandardPaths>
-#include <QStringDecoder>
-#include <QMutex>
-#include <QMutexLocker>
 #include <iconv.h>
 
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QDir>
-#include <QFileInfo>
-#include <QFuture>
-#include <QProcess>
-#include <QSet>
-#include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
 #include <csignal>
 #include <clocale>
@@ -57,7 +41,7 @@ void stopTerminal(int) { stopped = 1; }
 struct Pane {
     Session session;
     int treeTop = 0, fileTop = 0;
-    explicit Pane(const QString &path = QString("/")) : session(path) {}
+    explicit Pane(const String &path = String("/")) : session(path) {}
 };
 enum class Display { Name, SizeAttributes, Details, LongName };
 enum class Prompt { None, Filespec, Path, Spell, Quit, Permissions, Stamp, MetadataReview };
@@ -65,7 +49,7 @@ enum class Work { None, Scan, Document, Metadata };
 struct MetadataResult {
     int changed = 0, unchanged = 0, failed = 0;
     bool cancelled = false;
-    QString error;
+    String error;
     ScanResult scan;
 };
 enum TerminalKey { AltLeft = 0x2000, AltRight, AltHome };
@@ -79,39 +63,39 @@ class TerminalUI {
     int side_ = 0, rows_ = 0, columns_ = 0, menu_ = 0, spinner_ = 0;
     Display display_ = Display::Details;
     Prompt prompt_ = Prompt::None;
-    QString input_, status_, viewerPath_, editorNotice_;
+    String input_, status_, viewerPath_, editorNotice_;
     bool reloadEditedViewer_ = false;
-    QStringList filespecHistory_;
+    StringList filespecHistory_;
     int cursor_ = 0, historyIndex_ = -1, locationIndex_ = 0, locationTop_ = 0, viewerTop_ = 0;
-    QVector<MountPoint> locations_;
+    Vector<MountPoint> locations_;
     bool help_ = false, location_ = false, viewer_ = false, hex_ = false, quit_ = false;
     bool sizes_ = false, colors_ = false, parentLoad_ = false, preserveTags_ = true;
     Work work_ = Work::None;
     Cancellation cancel_;
-    QFuture<ScanResult> scan_;
-    QFuture<ViewDocument> document_;
-    QFuture<MetadataResult> metadata_;
-    QVector<FileMetadata> metadataTargets_;
-    QVector<quint32> permissionModes_;
+    Future<ScanResult> scan_;
+    Future<ViewDocument> document_;
+    Future<MetadataResult> metadata_;
+    Vector<FileMetadata> metadataTargets_;
+    Vector<uint32> permissionModes_;
     StampPlan stampPlan_;
     StampField stampField_ = StampField::Written;
     StampMode stampMode_ = StampMode::Set;
     bool stamping_ = false, metadataTagged_ = false, inputSelected_ = false;
-    QStringList stampHistory_;
+    StringList stampHistory_;
     ViewDocument viewed_;
     HexSnapshot documentSnapshot_, viewerSnapshot_;
     bool documentEdit_ = false, editing_ = false, savePrompt_ = false, asciiEdit_ = false;
-    QByteArray editPage_;
-    qsizetype editOffset_ = 0, editCursor_ = 0, editCapacity_ = 0;
+    Bytes editPage_;
+    Index editOffset_ = 0, editCursor_ = 0, editCapacity_ = 0;
     int editNibble_ = 0, afterSave_ = 0;
     std::optional<bool> documentMode_;
     bool autoview_ = false, autoviewFromTree_ = false, pendingAutoview_ = false;
     bool previewReading_ = false, previewHex_ = false, previewAuto_ = true;
     int previewTop_ = 0, autoviewPercent_ = 40;
-    QString previewPath_;
+    String previewPath_;
     ViewDocument previewed_;
     Cancellation previewCancel_;
-    QFuture<ViewDocument> previewRead_;
+    Future<ViewDocument> previewRead_;
 
     #include "terminal/terminalcommands.inc"
 
@@ -126,7 +110,7 @@ class TerminalUI {
     int listWidth() const { const int w=width();return listWidth(active_,statisticsVisible(w,true)?w-22:w,true); }
     int bytesPerRow(int w) const { return w >= 78 ? 16 : w >= 46 ? 8 : w >= 30 ? 4 : 1; }
     int ink(int pair) const { return colors_ ? COLOR_PAIR((viewer_||previewDrawing_)&&!editing_&&viewerBackground_&&pair!=3&&pair<=10?20+pair+10*(viewerBackground_-1):pair) : pair == 3 ? A_REVERSE : A_NORMAL; }
-    void text(int x, int y, const QString &value, int pair = 1, int limit = -1)
+    void text(int x, int y, const String &value, int pair = 1, int limit = -1)
     {
         if (y < 0 || y >= rows_ || x < 0 || x >= columns_) return;
         limit = std::min(limit < 0 ? columns_ - x : limit, columns_ - x);
@@ -141,9 +125,9 @@ class TerminalUI {
             mvwaddnwstr(stdscr, y, x + count, &glyph, 1);count += cells;
         }
     }
-    QString pathLabel(const QString &path, int available) const
+    String pathLabel(const String &path, int available) const
     {
-        return path.size() <= available ? path : QString("…") + path.right(std::max(0, available - 1));
+        return path.size() <= available ? path : String("…") + path.right(std::max(0, available - 1));
     }
     void fill(int x, int y, int count, int pair)
     {
@@ -156,7 +140,7 @@ class TerminalUI {
         helpDocument_.constrain(w, height);
         const auto lines = helpDocument_.lines(w);
         text(1, 0, (columns_<64 ? "LTree Help / " : "LTree Commander Help / ") + helpDocument_.title(), 2);
-        text(1, 1, QString(columns_-2, QChar(0x2500)), 2);
+        text(1, 1, String(columns_-2, Char(0x2500)), 2);
         for(int i = 0; i < height && helpDocument_.top()+i < lines.size(); ++i) {
             const int row = helpDocument_.top()+i;
             const auto &line = lines[row];
@@ -166,7 +150,7 @@ class TerminalUI {
             if(!selected && line.keyLength)text(x, i+3, line.text.left(line.keyLength), 2);
             if(!helpDocument_.index() && !helpDocument_.finding() && !helpDocument_.query().isEmpty()) {
                 int at=0;
-                while((at=line.text.indexOf(helpDocument_.query(),at,Qt::CaseInsensitive))>=0) {
+                while((at=line.text.indexOf(helpDocument_.query(),at,TextOptions::CaseInsensitive))>=0) {
                     text(x+at,i+3,line.text.mid(at,helpDocument_.query().size()),3);at+=helpDocument_.query().size();
                 }
             }
@@ -176,22 +160,22 @@ class TerminalUI {
             const int position=helpDocument_.top()*(height-thumb)/std::max(1,int(lines.size())-height);
             for(int i=0;i<height;++i)text(columns_-2,i+3,i>=position && i<position+thumb ? "█" : "│",2,1);
         }
-        text(1, rows_-3, QString(columns_-2, QChar(0x2500)), 2);
+        text(1, rows_-3, String(columns_-2, Char(0x2500)), 2);
         commands(1, rows_-2, columns_<64 ? "[↑↓] Scroll [←→] Chapter [Tab] Index" : "[Up/Down] Scroll [PgUp/PgDn] Page [Left/Right] Chapter [Tab] Index");
         if(helpDocument_.finding()) {
             commands(1,rows_-2,"[Enter] Find [Backspace] Erase [Esc] Cancel search");
             text(1, rows_-1, "Find in help: "+helpDocument_.query().right(std::max(1,columns_-17)));
             fill(std::min(columns_-2,15+int(helpDocument_.query().size())),rows_-1,1,3);
         } else commands(1,rows_-1,"[F] Find [Space] Next [Esc/F1] Return  "+(helpDocument_.notice().isEmpty() ?
-            QString("Lines %1-%2/%3").arg(helpDocument_.top()+1).arg(std::min(helpDocument_.top()+height,int(lines.size()))).arg(lines.size()) : helpDocument_.notice()));
+            String("Lines %1-%2/%3").arg(helpDocument_.top()+1).arg(std::min(helpDocument_.top()+height,int(lines.size()))).arg(lines.size()) : helpDocument_.notice()));
     }
     void helpKey(int value)
     {
-        HelpAction action=HelpAction::Input;QString typed;
+        HelpAction action=HelpAction::Input;String typed;
         if(value==27 || value==KEY_F(1))action=HelpAction::Close;
         else if(value==10 || value==13 || value==KEY_ENTER)action=HelpAction::Accept;
         else if(value==KEY_BACKSPACE || value==127 || value==8)action=HelpAction::Backspace;
-        else if(helpDocument_.finding()) { if(value>=32 && value<KEY_MIN)typed=QString(QChar(value)); }
+        else if(helpDocument_.finding()) { if(value>=32 && value<KEY_MIN)typed=String(Char(value)); }
         else if(value==KEY_UP)action=HelpAction::Up;
         else if(value==KEY_DOWN)action=HelpAction::Down;
         else if(value==KEY_PPAGE)action=HelpAction::PageUp;
@@ -205,13 +189,13 @@ class TerminalUI {
         else if(value==' ')action=HelpAction::Repeat;
         help_=helpDocument_.act(action,std::max(8,std::min(88,columns_-4)),std::max(1,rows_-6),typed);
     }
-    void commands(int x, int y, const QString &value)
+    void commands(int x, int y, const String &value)
     {
         bool key = false;
         for (const auto ch : value) {
             if (ch == '[') key = true;
             else if (ch == ']') key = false;
-            else text(x++, y, QString(ch), key ? 2 : 1, 1);
+            else text(x++, y, String(ch), key ? 2 : 1, 1);
         }
     }
     Layout layout(int top, int w) const
@@ -248,7 +232,7 @@ class TerminalUI {
             if (current && focused) fill(left, y, grid.width, 3);
             if (s.tags.contains(file.path) || (current && !focused)) text(left, y, s.tags.contains(file.path) ? "♦" : "►", current ? 3 : 1, 1);
             if (display_ == Display::LongName) { text(left + 1, y, file.name, color, grid.width - 1);continue; }
-            QString base = file.name, extension;const int dot = int(base.lastIndexOf('.'));
+            String base = file.name, extension;const int dot = int(base.lastIndexOf('.'));
             if (dot > 0) { extension = base.mid(dot);base = base.left(dot); }
             int right = left + grid.width;
             if (display_ == Display::Details && grid.width >= 44) {
@@ -258,7 +242,7 @@ class TerminalUI {
             if (display_ != Display::Name && grid.width >= 26) {
                 const int attrsWidth = display_ == Display::Details && grid.width >= 64 ? 11 : 6;
                 right -= attrsWidth + 1;text(right, y, fileAttributeText(file.attributes, file.symlink, attrsWidth), color, attrsWidth);
-                right -= 12;text(right, y, QString::number(file.size).rightJustified(11), color, 11);
+                right -= 12;text(right, y, String::number(file.size).rightJustified(11), color, 11);
             }
             const int extWidth = std::min(display_ == Display::Details && grid.width >= 54 ? extensionWidth_ : 4, std::max(1, right - left - 3));right -= extWidth + 1;
             text(left + 1, y, base, color, std::max(1, right - left - 2));text(right, y, extension, color, extWidth);
@@ -268,23 +252,23 @@ class TerminalUI {
     {
         const int area=statisticsVisible(w,focused)?w-22:w;
         const int list = listWidth(pane, area, focused);visible(pane, list);const auto &s = pane.session;
-        const QString path = s.view != View::Tree && s.currentFile() ? QFileInfo(s.currentFile()->path).absolutePath() : s.directory;
+        const String path = s.view != View::Tree && s.currentFile() ? FileInfo(s.currentFile()->path).absolutePath() : s.directory;
         text(x + 1, 0, pathLabel(path, w - 2), 1, w - 2);
         for (int y = 1; y <= end(); ++y) { text(x, y, "│");text(x + w - 1, y, "│"); }
-        text(x, 1, "┌" + QString(w - 2, QChar(0x2500)) + "┐", 1, w);
-        text(x, end(), "└" + QString(w - 2, QChar(0x2500)) + "┘", 1, w);
-        const QString mode = s.view == View::Tree ? "TREE" : s.view == View::Directory ? "DIR" : s.view == View::Branch ? "BRANCH" : s.view==View::Global?"GLOBAL":"SHOWALL";
+        text(x, 1, "┌" + String(w - 2, Char(0x2500)) + "┐", 1, w);
+        text(x, end(), "└" + String(w - 2, Char(0x2500)) + "┘", 1, w);
+        const String mode = s.view == View::Tree ? "TREE" : s.view == View::Directory ? "DIR" : s.view == View::Branch ? "BRANCH" : s.view==View::Global?"GLOBAL":"SHOWALL";
         text(x + 1, 1, "<" + mode + ": " + (s.tagsOnly ? "♦ " : "") + s.filespec.text() + ">", focused ? 2 : 1, w - 2);
         if (s.view == View::Tree) {
             const auto *sizes = sizes_ && area > 35 ? &s.branchSizes() : nullptr;
             for (int row = 2, i = pane.treeTop; row < divider() && i < s.tree().size(); ++row, ++i) {
                 const auto &item = s.tree()[i];const auto &dir = s.directories()[item.path];const bool current = item.path == s.directory;
                 if (current && focused) fill(x + 1, row, area - 2, 3);
-                text(x + 1, row, QString(dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
+                text(x + 1, row, String(dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
                 if (sizes) text(x + area - 15, row, sizes->value(item.path).label(), current && focused ? 3 : 2, 14);
                 if (current && !focused) text(x + 1, row, "►", 3, 1);
             }
-            text(x, divider(), "├" + QString(w - 2, QChar(0x2500)) + "┤", 1, w);
+            text(x, divider(), "├" + String(w - 2, Char(0x2500)) + "┤", 1, w);
             files(pane, x, divider() + 1, area, focused);
         } else {
             files(pane, x, 2, list, focused);
@@ -296,7 +280,7 @@ class TerminalUI {
         if(area<w)drawSidebar(pane,x+area-1,w-area);
         const int total = s.view == View::Tree ? int(s.tree().size()) : int(s.files().size());
         const int index = total ? (s.view == View::Tree ? s.treeIndex() : s.fileIndex) + 1 : 0;
-        const auto ordinal = QString(" %1/%2 ").arg(index).arg(total);text(x + list - 1 - ordinal.size(), end(), ordinal, 1);
+        const auto ordinal = String(" %1/%2 ").arg(index).arg(total);text(x + list - 1 - ordinal.size(), end(), ordinal, 1);
     }
     void drawDocument(int x, int y, int h, int w, const ViewDocument &doc, bool hexMode, int &first)
     {
@@ -308,14 +292,14 @@ class TerminalUI {
             if (hexMode) {
                 const int offset = index * bytes;auto chunk = doc.bytes.mid(offset, bytes);
                 if (editing_ && &doc == &viewed_) {
-                    for (qsizetype i = 0; i < chunk.size(); ++i) {
-                        const qsizetype at = offset + i - editOffset_;
+                    for (Index i = 0; i < chunk.size(); ++i) {
+                        const Index at = offset + i - editOffset_;
                         if (at >= 0 && at < editPage_.size()) chunk[i] = editPage_[at];
                     }
                 }
-                QString hex, ascii;
-                for (const unsigned char value : chunk) { hex += QString("%1 ").arg(value, 2, 16, QChar('0')).toUpper();ascii += viewerMask_&&(value<32||value>127)?QString("."):terminalByteGlyph(value); }
-                text(x, y + row, QString("%1").arg(offset, 8, 16, QChar('0')).toUpper(), 1, w);text(x + 10, y + row, hex, 2, w - 10);
+                String hex, ascii;
+                for (const unsigned char value : chunk) { hex += String("%1 ").arg(value, 2, 16, Char('0')).toUpper();ascii += viewerMask_&&(value<32||value>127)?String("."):terminalByteGlyph(value); }
+                text(x, y + row, String("%1").arg(offset, 8, 16, Char('0')).toUpper(), 1, w);text(x + 10, y + row, hex, 2, w - 10);
                 if (w >= 10 + bytes * 4) text(x + 10 + bytes * 3, y + row, ascii, 2, bytes);
                 if (editing_ && &doc == &viewed_ && editOffset_ + editCursor_ >= offset && editOffset_ + editCursor_ < offset + chunk.size()) {
                     const int at = int(editOffset_ + editCursor_ - offset);
@@ -323,8 +307,8 @@ class TerminalUI {
                     if (w >= 10 + bytes * 4) text(x + 10 + bytes * 3 + at, y + row, ascii.mid(at, 1), asciiEdit_ ? 3 : 2, 1);
                 }
             } else {
-                const qsizetype from = doc.lines[index], to = index + 1 < doc.lines.size() ? doc.lines[index + 1] : doc.text.size();
-                text(x, y + row, QString::number(index + 1).rightJustified(5), 1, std::min(w, 5));
+                const Index from = doc.lines[index], to = index + 1 < doc.lines.size() ? doc.lines[index + 1] : doc.text.size();
+                text(x, y + row, String::number(index + 1).rightJustified(5), 1, std::min(w, 5));
                 text(x + 7, y + row, doc.text.mid(from, to - from).remove('\r').remove('\n').replace('\t', "    "), 2, w - 7);
             }
         }
@@ -332,13 +316,13 @@ class TerminalUI {
     void drawAutoview(int x, int w)
     {
         const auto *file = active_.session.currentFile();if (!file) return;
-        text(x, 2, "AUTOVIEW " + QString(previewHex_ ? "HEX: " : "TEXT: ") + file->name, 1, w);
+        text(x, 2, "AUTOVIEW " + String(previewHex_ ? "HEX: " : "TEXT: ") + file->name, 1, w);
         if (previewReading_ || previewPath_ != file->path) {
-            text(x, 3, QString("%1 Reading…").arg(QString("|/-\\")[spinner_++ % 4]), 1, w);
+            text(x, 3, String("%1 Reading…").arg(String("|/-\\")[spinner_++ % 4]), 1, w);
         } else if (!previewed_.error.isEmpty()) text(x, 3, previewed_.error, 2, w);
         else {
             drawStyledPreview(x,w);
-            text(x, end() - 1, QString("%1 bytes  %2").arg(previewed_.bytes.size()).arg(previewed_.encoding), 1, w);
+            text(x, end() - 1, String("%1 bytes  %2").arg(previewed_.bytes.size()).arg(previewed_.encoding), 1, w);
         }
     }
     void drawViewer()
@@ -356,7 +340,7 @@ class TerminalUI {
                 commands(0, rows_ - 3, "[Arrows/Home/End] Move [PgUp/PgDn] Page [Tab] Hex/ASCII");
                 commands(0, rows_ - 2, "[Enter] Finish [Ctrl+S] Save [F8] Undo page [Esc] Discard");
             }
-            text(0, rows_ - 1, QString("HEX EDIT %1  Offset %2  %3").arg(asciiEdit_ ? "ASCII" : "HEX").arg(editOffset_ + editCursor_, 8, 16, QChar('0')).arg(editPage_ == viewed_.bytes.mid(editOffset_, editPage_.size()) ? "Unchanged" : "Modified"));
+            text(0, rows_ - 1, String("HEX EDIT %1  Offset %2  %3").arg(asciiEdit_ ? "ASCII" : "HEX").arg(editOffset_ + editCursor_, 8, 16, Char('0')).arg(editPage_ == viewed_.bytes.mid(editOffset_, editPage_.size()) ? "Unchanged" : "Modified"));
         }
     }
     void draw()
@@ -375,7 +359,7 @@ class TerminalUI {
                 if (i == locationIndex_) fill(1, row, columns_ - 2, 3);
                 text(1, row, locations_[i].path + "  " + locations_[i].type, i == locationIndex_ ? 3 : 2, columns_ - 2);
             }
-            if(avail_&&!locations_.isEmpty()){auto stats=systemStatistics(locations_[locationIndex_].path);text(0,rows_-3,QString("Capacity %1  Available %2 bytes  %3").arg(stats.capacity).arg(stats.available).arg(stats.filesystem),2);}
+            if(avail_&&!locations_.isEmpty()){auto stats=systemStatistics(locations_[locationIndex_].path);text(0,rows_-3,String("Capacity %1  Available %2 bytes  %3").arg(stats.capacity).arg(stats.available).arg(stats.filesystem),2);}
             commands(0, rows_ - 2, "[Arrows] Select  [Enter] Open  [/] Enter path  [F5] Refresh  [Esc] Cancel");
         } else {
             if (other_) {
@@ -393,18 +377,18 @@ class TerminalUI {
         if (!help_ && !viewer_ && info_) drawInfoBox();
         if (work_ != Work::None) {
             fill(0, rows_ - 1, columns_, 1);
-            commands(0, rows_ - 1, QString("%1 %2  [Esc] Stop").arg(QString("|/-\\")[spinner_++ % 4]).arg(work_ == Work::Scan ? "Logging…" : work_ == Work::Document ? "Reading file…" : "Changing metadata…"));
+            commands(0, rows_ - 1, String("%1 %2  [Esc] Stop").arg(String("|/-\\")[spinner_++ % 4]).arg(work_ == Work::Scan ? "Logging…" : work_ == Work::Document ? "Reading file…" : "Changing metadata…"));
         }
         else if (prompt_ == Prompt::Permissions || prompt_ == Prompt::Stamp || prompt_ == Prompt::MetadataReview) drawMetadataPrompt();
         else if (prompt_ != Prompt::None) {
-            const QString label = prompt_ == Prompt::Filespec ? "FILESPEC: " : prompt_ == Prompt::Path ? "LOG path: " : prompt_ == Prompt::Spell ? "SPELL: " : "Quit? Y/N: ";
+            const String label = prompt_ == Prompt::Filespec ? "FILESPEC: " : prompt_ == Prompt::Path ? "LOG path: " : prompt_ == Prompt::Spell ? "SPELL: " : "Quit? Y/N: ";
             const int visible = std::max(1, columns_ - int(label.size()) - 1), start = std::max(0, cursor_ - visible + 1);
             if (!status_.isEmpty()) { fill(0, rows_ - 2, columns_, 1);text(0, rows_ - 2, status_); }
             fill(0, rows_ - 1, columns_, 2);text(0, rows_ - 1, label + input_.mid(start), 2);
             wmove(stdscr, rows_ - 1, int(label.size()) + cursor_ - start);curs_set(2);
         } else if (!help_ && !status_.isEmpty()) { fill(0, rows_ - 1, columns_, 1);text(0, rows_ - 1, status_, 1); }
         else if (!help_ && autoview_ && listWidth() == width()) text(0, rows_ - 1, "Autoview needs a wider panel", 1);
-        else if (!viewer_ && !help_) text(0, rows_ - 1, QString("LTree Commander %1  Files %2  Tagged %3  %4").arg(QCoreApplication::applicationVersion()).arg(active_.session.files().size()).arg(active_.session.tags.size()).arg(QDateTime::currentDateTime().toString("HH:mm:ss")), 1);
+        else if (!viewer_ && !help_) text(0, rows_ - 1, String("LTree Commander %1  Files %2  Tagged %3  %4").arg(TerminalApplication::applicationVersion()).arg(active_.session.files().size()).arg(active_.session.tags.size()).arg(DateTime::currentDateTime().toString("HH:mm:ss")), 1);
         wrefresh(stdscr);
     }
     void stopAutoview()
@@ -434,7 +418,7 @@ class TerminalUI {
         const auto *file = active_.session.currentFile();
         if (active_.session.view == View::Tree || !file) { stopAutoview();status_ = "No files for Autoview";return; }
         if (work_ != Work::None) { if (previewCancel_) previewCancel_->store(true);return; }
-        const QString path = file->path;
+        const String path = file->path;
         if (previewReading_) {
             if (previewPath_ != path) previewCancel_->store(true);
             if (!previewRead_.isFinished()) return;
@@ -450,14 +434,14 @@ class TerminalUI {
         if (previewPath_ == path) return;
         previewPath_ = path;previewed_ = {};previewTop_ = 0;previewReading_ = true;
         previewCancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = previewCancel_;
-        previewRead_ = QtConcurrent::run([path, cancel] { return readViewDocument(path, cancel); });
+        previewRead_ = runAsync([path, cancel] { return readViewDocument(path, cancel); });
     }
-    void load(bool recursive, bool preserve = true, const QString &path = {}, bool parent = false)
+    void load(bool recursive, bool preserve = true, const String &path = {}, bool parent = false)
     {
         invalidateAutoview();cancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = cancel_;
-        const QString target = path.isEmpty() ? active_.session.directory : path;
+        const String target = path.isEmpty() ? active_.session.directory : path;
         parentLoad_ = parent;preserveTags_ = preserve;work_ = Work::Scan;
-        scan_ = QtConcurrent::run([target, recursive, cancel] { return scanDirectories(target, recursive, cancel); });
+        scan_ = runAsync([target, recursive, cancel] { return scanDirectories(target, recursive, cancel); });
     }
     void complete()
     {
@@ -468,7 +452,7 @@ class TerminalUI {
                 if (other_) other_->session.apply(result.scan, true);
             }
             invalidateAutoview();
-            status_ = QString("%1 %2: %3/%4 changed; %5 unchanged; %6 failed")
+            status_ = String("%1 %2: %3/%4 changed; %5 unchanged; %6 failed")
                 .arg(stamping_ ? "Stamp" : "Permissions", result.cancelled ? "cancelled" : "completed")
                 .arg(result.changed).arg(metadataTargets_.size()).arg(result.unchanged).arg(result.failed);
             if (!result.error.isEmpty()) status_ += "; " + result.error;
@@ -477,7 +461,7 @@ class TerminalUI {
             const auto result = scan_.result();work_ = Work::None;
             if (parentLoad_) active_.session.expandToParent(result);else active_.session.apply(result, preserveTags_);
             if (other_) other_->session.apply(result, true);
-            status_ = result.cancelled ? "Logging cancelled" : std::exchange(editorNotice_, QString());
+            status_ = result.cancelled ? "Logging cancelled" : std::exchange(editorNotice_, String());
             for (const auto &dir : result.directories) if (!dir.error.isEmpty()) { status_ = dir.error;break; }
             if (reloadEditedViewer_) {
                 reloadEditedViewer_ = false;
@@ -489,7 +473,7 @@ class TerminalUI {
             }
         } else if (work_ == Work::Document && document_.isFinished()) {
             auto result=document_.result();work_ = Work::None;
-            if(documentPreview_){documentPreview_=false;previewed_=std::move(result);previewTop_=documentTop_;previewPath_=active_.session.currentFile()?active_.session.currentFile()->path:QString();previewAuto_=false;return;}
+            if(documentPreview_){documentPreview_=false;previewed_=std::move(result);previewTop_=documentTop_;previewPath_=active_.session.currentFile()?active_.session.currentFile()->path:String();previewAuto_=false;return;}
             viewed_=std::move(result);
             if (viewed_.cancelled || !viewed_.error.isEmpty()) status_ = viewed_.cancelled ? "Reading cancelled" : viewed_.error;
             else {
@@ -507,24 +491,24 @@ class TerminalUI {
         if (!hex_) viewerTop_ = 0;
         viewerTop_ = std::clamp(viewerTop_, 0, int((viewed_.bytes.size() - 1) / bytesPerRow(columns_)));
         hex_ = true;editing_ = true;savePrompt_ = asciiEdit_ = false;editNibble_ = afterSave_ = 0;
-        editOffset_ = qsizetype(viewerTop_) * bytesPerRow(columns_);
-        editCapacity_ = qsizetype(rows_ - 4) * bytesPerRow(columns_);
+        editOffset_ = Index(viewerTop_) * bytesPerRow(columns_);
+        editCapacity_ = Index(rows_ - 4) * bytesPerRow(columns_);
         editPage_ = viewed_.bytes.mid(editOffset_, editCapacity_);editCursor_ = 0;
     }
     void finishHexPage(bool save)
     {
         if (save && editPage_ != viewed_.bytes.mid(editOffset_, editPage_.size())) {
-            const QString error = saveHexPage(viewerPath_, viewerSnapshot_, viewed_.bytes, editOffset_, editPage_);
+            const String error = saveHexPage(viewerPath_, viewerSnapshot_, viewed_.bytes, editOffset_, editPage_);
             if (!error.isEmpty()) { status_ = error;savePrompt_ = false;return; }
             viewed_.bytes.replace(editOffset_, editPage_.size(), editPage_);viewerSnapshot_ = hexSnapshot(viewerPath_);
-            load(false, true, QFileInfo(viewerPath_).absolutePath());editorNotice_ = "Hex changes saved";
+            load(false, true, FileInfo(viewerPath_).absolutePath());editorNotice_ = "Hex changes saved";
         }
         savePrompt_ = false;
         if (afterSave_ == -1 || afterSave_ == 1) {
-            editOffset_ = std::max(qsizetype(0), editOffset_ + afterSave_ * editCapacity_);
+            editOffset_ = std::max(Index(0), editOffset_ + afterSave_ * editCapacity_);
             viewerTop_ = int(editOffset_ / bytesPerRow(columns_));editCursor_ = editNibble_ = 0;
         } else if (afterSave_ != 2) editing_ = false;
-        editPage_ = editing_ ? viewed_.bytes.mid(editOffset_, editCapacity_) : QByteArray();afterSave_ = 0;
+        editPage_ = editing_ ? viewed_.bytes.mid(editOffset_, editCapacity_) : Bytes();afterSave_ = 0;
     }
     void hexEditKey(int key, bool literal, bool alt)
     {
@@ -558,50 +542,50 @@ class TerminalUI {
                 if (key > 255) { status_ = "Character must fit in one byte";return; }
                 editPage_[editCursor_] = char(key);if (editCursor_ + 1 < editPage_.size()) ++editCursor_;
             } else {
-                bool ok = false;const int nibble = QString(QChar(key)).toInt(&ok, 16);if (!ok) return;
-                const int old = quint8(editPage_[editCursor_]);
+                bool ok = false;const int nibble = String(Char(key)).toInt(&ok, 16);if (!ok) return;
+                const int old = uint8(editPage_[editCursor_]);
                 editPage_[editCursor_] = char(editNibble_ ? (old & 240) | nibble : (old & 15) | (nibble << 4));
                 if (editNibble_ == 0) editNibble_ = 1;else { editNibble_ = 0;if (editCursor_ + 1 < editPage_.size()) ++editCursor_; }
             }
         }
-        editCursor_ = std::clamp(editCursor_, qsizetype(0), editPage_.size() - 1);
+        editCursor_ = std::clamp(editCursor_, Index(0), editPage_.size() - 1);
     }
-    void readDocument(const QString &path, bool edit = false, std::optional<bool> mode = {})
+    void readDocument(const String &path, bool edit = false, std::optional<bool> mode = {})
     {
         documentReload_=viewer_&&viewerPath_==path;documentTop_=viewerTop_;documentPreview_=previewForward_;viewerPath_ = path;documentEdit_ = edit;documentMode_ = mode;documentSnapshot_ = hexSnapshot(path);
         cancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = cancel_;
-        work_ = Work::Document;document_ = QtConcurrent::run([path, cancel] { return readViewDocument(path, cancel); });
+        work_ = Work::Document;document_ = runAsync([path, cancel] { return readViewDocument(path, cancel); });
     }
-    void editFile(const QString &path)
+    void editFile(const String &path)
     {
-        if (!QFileInfo(path).isFile()) { status_ = "No file selected";return; }
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly)) { status_ = file.errorString();return; }
-        const QByteArray sample = file.read(65536);
-        if (file.error() != QFileDevice::NoError) { status_ = file.errorString();return; }
+        if (!FileInfo(path).isFile()) { status_ = "No file selected";return; }
+        File file(path);
+        if (!file.open(IO::ReadOnly)) { status_ = file.errorString();return; }
+        const Bytes sample = file.read(65536);
+        if (file.error() != File::NoError) { status_ = file.errorString();return; }
         if (terminalBinaryData(sample)) {
             if (file.size() > 32 * 1024 * 1024) { status_ = "Internal hex editor limit: 32 MiB";return; }
             readDocument(path, true);return;
         }
         file.close();
-        QString error;auto command = terminalEditorCommand(&error);
+        String error;auto command = terminalEditorCommand(&error);
         if (command.isEmpty()) { status_ = error;return; }
-        QProcess editor;
-        editor.setWorkingDirectory(QFileInfo(path).absolutePath());
-        editor.setProcessChannelMode(QProcess::ForwardedChannels);
-        editor.setInputChannelMode(QProcess::ForwardedInputChannel);
-        editor.setUnixProcessParameters(QProcess::UnixProcessFlag::ResetSignalHandlers);
+        Process editor;
+        editor.setWorkingDirectory(FileInfo(path).absolutePath());
+        editor.setProcessChannelMode(Process::ForwardedChannels);
+        editor.setInputChannelMode(Process::ForwardedInputChannel);
+        editor.setUnixProcessParameters(Process::UnixProcessFlag::ResetSignalHandlers);
         const auto previousInt = std::signal(SIGINT, SIG_IGN), previousQuit = std::signal(SIGQUIT, SIG_IGN);
         // Entregar la terminal al editor y recuperar después el modo y la pantalla de ncurses.
         keyboard_.suspend();def_prog_mode();endwin();
-        const QString executable = command.takeFirst();command.append(path);
+        const String executable = command.takeFirst();command.append(path);
         editor.start(executable, command);
         const bool started = editor.waitForStarted();
         if (started) {
-            while (editor.state() != QProcess::NotRunning) {
+            while (editor.state() != Process::NotRunning) {
                 editor.waitForFinished(100);
-                QCoreApplication::processEvents();
-                if (stopped && editor.state() != QProcess::NotRunning) {
+                TerminalApplication::processEvents();
+                if (stopped && editor.state() != Process::NotRunning) {
                     editor.terminate();
                     if (!editor.waitForFinished(3000)) { editor.kill();editor.waitForFinished(); }
                     break;
@@ -612,9 +596,9 @@ class TerminalUI {
         reset_prog_mode();clearok(stdscr, true);wrefresh(stdscr);keyboard_.resume();
         if (!started) { status_ = "Cannot start editor: " + editor.errorString();return; }
         reloadEditedViewer_ = viewer_;
-        load(false, true, QFileInfo(path).absolutePath());
-        editorNotice_ = editor.exitStatus() == QProcess::CrashExit ? "Editor terminated unexpectedly" :
-            editor.exitCode() ? QString("Editor exited with code %1").arg(editor.exitCode()) : QString();
+        load(false, true, FileInfo(path).absolutePath());
+        editorNotice_ = editor.exitStatus() == Process::CrashExit ? "Editor terminated unexpectedly" :
+            editor.exitCode() ? String("Editor exited with code %1").arg(editor.exitCode()) : String();
     }
     void beginMetadata(bool stamp, bool tagged)
     {
@@ -624,7 +608,7 @@ class TerminalUI {
         if (tagged) {
             for (const auto &file : s.files()) if (s.tags.contains(file.path)) metadataTargets_.append(readMetadata(file.path));
         } else {
-            const auto path = s.view == View::Tree ? s.directory : s.currentFile() ? s.currentFile()->path : QString();
+            const auto path = s.view == View::Tree ? s.directory : s.currentFile() ? s.currentFile()->path : String();
             if (!path.isEmpty()) metadataTargets_.append(readMetadata(path));
         }
         if (metadataTargets_.isEmpty()) { status_ = tagged ? "No tagged files in the current list" : "No file selected";return; }
@@ -637,30 +621,30 @@ class TerminalUI {
             }
         }
         stampField_ = StampField::Written;stampMode_ = StampMode::Set;
-        openPrompt(stamp ? Prompt::Stamp : Prompt::Permissions, stamp ? QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") : QString());
+        openPrompt(stamp ? Prompt::Stamp : Prompt::Permissions, stamp ? DateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") : String());
         inputSelected_ = stamp;
     }
     void drawMetadataPrompt()
     {
         for (int y = rows_ - 3; y < rows_; ++y) fill(0, y, columns_, 1);
         const auto &target = metadataTargets_.first();
-        const QString title = stamping_ ? "STAMP" : "PERMISSIONS";
-        text(0, rows_ - 3, metadataTagged_ ? QString("%1 %2 tagged files").arg(title).arg(metadataTargets_.size()) :
+        const String title = stamping_ ? "STAMP" : "PERMISSIONS";
+        text(0, rows_ - 3, metadataTagged_ ? String("%1 %2 tagged files").arg(title).arg(metadataTargets_.size()) :
             title + ": " + pathLabel(target.path, std::max(1, columns_ - int(title.size()) - 2)), 1);
         if (prompt_ == Prompt::MetadataReview) {
-            text(0, rows_ - 2, stamping_ ? QStringList{"Written", "Accessed", "Both"}[int(stampField_)] + " / " + QStringList{"Set", "Adjust", "Increment"}[int(stampMode_)] + ": " + input_ + " to " + QString::number(metadataTargets_.size()) + " file(s)" :
-                metadataTagged_ ? "Apply " + input_ + " to " + QString::number(metadataTargets_.size()) + " tagged files" :
+            text(0, rows_ - 2, stamping_ ? StringList{"Written", "Accessed", "Both"}[int(stampField_)] + " / " + StringList{"Set", "Adjust", "Increment"}[int(stampMode_)] + ": " + input_ + " to " + String::number(metadataTargets_.size()) + " file(s)" :
+                metadataTagged_ ? "Apply " + input_ + " to " + String::number(metadataTargets_.size()) + " tagged files" :
                 permissionOctal(target.mode) + " (" + permissionText(target.mode) + ") -> " + permissionOctal(permissionModes_.first()) + " (" + permissionText(permissionModes_.first()) + ")", 2);
             commands(0, rows_ - 1, "[Y/Enter] Apply [N/Esc] Cancel [Backspace] Edit");return;
         }
-        const QString label = stamping_ ? QStringList{"Set to: ", "Adjust: ", "Increment: "}[int(stampMode_)] : "Mode (" + permissionOctal(target.mode) + "): ";
+        const String label = stamping_ ? StringList{"Set to: ", "Adjust: ", "Increment: "}[int(stampMode_)] : "Mode (" + permissionOctal(target.mode) + "): ";
         const int room = std::max(1, columns_ - int(label.size()) - 1), first = std::max(0, cursor_ - room + 1);
         text(0, rows_ - 2, label + input_.mid(first), 2);
         if (inputSelected_) fill(int(label.size()), rows_ - 2, std::min(room, int(input_.size())), 3);
         if (inputSelected_) text(int(label.size()), rows_ - 2, input_.mid(first), 3, room);
         if (!status_.isEmpty()) text(0, rows_ - 1, status_, 2);
         else if (stamping_) {
-            commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel [F2] Now [F4] " + QStringList{"Written", "Accessed", "Both"}[int(stampField_)] +
+            commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel [F2] Now [F4] " + StringList{"Written", "Accessed", "Both"}[int(stampField_)] +
                 " [F5] Mode [Tab] Current [F3/↑] Last");
         } else commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel  Examples: 755, u+w, go-w");
         wmove(stdscr, rows_ - 2, int(label.size()) + cursor_ - first);curs_set(2);
@@ -673,7 +657,7 @@ class TerminalUI {
         } else {
             permissionModes_.clear();
             for (const auto &target : metadataTargets_) {
-                quint32 mode = 0;
+                uint32 mode = 0;
                 if (!parsePermissions(input_, target.mode, target.directory, mode, status_)) return;
                 permissionModes_.append(mode);
             }
@@ -687,21 +671,21 @@ class TerminalUI {
         if (stamping_) {
             remember("stamp",input_);stampHistory_=histories_["stamp"].entries;
             const auto plan = stampPlan_;
-            metadata_ = QtConcurrent::run([plan, cancel] {
+            metadata_ = runAsync([plan, cancel] {
                 const auto result = stampFiles(plan, cancel);
                 return MetadataResult{result.changed, result.unchanged, result.failed, result.cancelled, result.error, result.scan};
             });
         } else {
             const auto targets = metadataTargets_;const auto modes = permissionModes_;
-            metadata_ = QtConcurrent::run([targets, modes, cancel] {
-                MetadataResult result;QSet<QString> directories;
+            metadata_ = runAsync([targets, modes, cancel] {
+                MetadataResult result;Set<String> directories;
                 for (int i = 0; i < targets.size(); ++i) {
                     if (cancel->load()) { result.cancelled = true;break; }
                     const auto &target = targets[i];const auto changed = changePermissions(target, modes[i], cancel);
                     if (changed.changed) ++result.changed;
                     else if (!changed.error.isEmpty()) { ++result.failed;if (result.error.isEmpty()) result.error = target.path + ": " + changed.error; }
                     else if (!changed.cancelled) ++result.unchanged;
-                    directories.insert(target.directory ? target.path : QFileInfo(target.path).absolutePath());
+                    directories.insert(target.directory ? target.path : FileInfo(target.path).absolutePath());
                     if (changed.cancelled) { result.cancelled = true;break; }
                 }
                 const auto refresh = std::make_shared<std::atomic_bool>(false);
@@ -710,11 +694,11 @@ class TerminalUI {
             });
         }
     }
-    void openPrompt(Prompt prompt, const QString &input = {}) { prompt_ = prompt;input_ = input;cursor_ = int(input.size());historyIndex_ = -1;inputSelected_ = false;status_.clear(); }
-    void selectRoot(QString path)
+    void openPrompt(Prompt prompt, const String &input = {}) { prompt_ = prompt;input_ = input;cursor_ = int(input.size());historyIndex_ = -1;inputSelected_ = false;status_.clear(); }
+    void selectRoot(String path)
     {
-        if (path == "~") path = QDir::homePath();else if (path.startsWith("~/")) path = QDir::homePath() + path.mid(1);
-        const QFileInfo info(QDir(active_.session.directory).absoluteFilePath(path));
+        if (path == "~") path = DirectoryPath::homePath();else if (path.startsWith("~/")) path = DirectoryPath::homePath() + path.mid(1);
+        const FileInfo info(DirectoryPath(active_.session.directory).absoluteFilePath(path));
         if (!info.isDir() || !info.isReadable()) { status_ = "Directory unavailable";return; }
         roots_.insert(active_.session.root,active_);
         stopAutoview();const auto root=info.canonicalFilePath();active_=roots_.contains(root)?roots_[root]:Pane(root);location_ = false;prompt_ = Prompt::None;load(false);
@@ -743,9 +727,9 @@ class TerminalUI {
             if (key == KEY_F(4)) { stampField_ = StampField((int(stampField_) + 1) % 3);return; }
             if (key == KEY_F(5)) {
                 const auto previous = stampMode_;stampMode_ = StampMode((int(stampMode_) + 1) % (metadataTagged_ ? 3 : 2));
-                if (stampMode_ == StampMode::Set) input_ = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+                if (stampMode_ == StampMode::Set) input_ = DateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
                 else if (previous == StampMode::Set) input_.clear();
-            } else if (key == KEY_F(2)) { stampMode_ = StampMode::Set;input_ = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"); }
+            } else if (key == KEY_F(2)) { stampMode_ = StampMode::Set;input_ = DateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss"); }
             else if (key == 9) {
                 const auto &target = metadataTargets_.first();stampMode_ = StampMode::Set;
                 input_ = (stampField_ == StampField::Accessed ? target.accessed : target.modified).toString("yyyy-MM-dd HH:mm:ss");
@@ -759,7 +743,7 @@ class TerminalUI {
         if (literal && key >= 32 && key != 127) {
             if (input_.size() < 1024) {
                 if (inputSelected_) { input_.clear();cursor_ = 0;inputSelected_ = false; }
-                const char32_t cp = char32_t(key);const QString added = QString::fromUcs4(&cp, 1);
+                const char32_t cp = char32_t(key);const String added = String::fromUcs4(&cp, 1);
                 input_.insert(cursor_, added);cursor_ += int(added.size());
             }
             return;
@@ -767,7 +751,7 @@ class TerminalUI {
         if (key == 10 || key == 13 || key == KEY_ENTER) {
             if (prompt_ == Prompt::Permissions || prompt_ == Prompt::Stamp) reviewMetadata();
             else if (prompt_ == Prompt::Filespec) {
-                QString error;if (!active_.session.filespec.set(input_, &error)) { status_ = error;return; }
+                String error;if (!active_.session.filespec.set(input_, &error)) { status_ = error;return; }
                 if (!input_.isEmpty()) { filespecHistory_.removeAll(input_);filespecHistory_.prepend(input_);if (filespecHistory_.size() > 64) filespecHistory_.removeLast(); }
                 active_.session.rebuild();prompt_ = Prompt::None;
             } else if (prompt_ == Prompt::Path) selectRoot(input_);
@@ -832,7 +816,7 @@ class TerminalUI {
             if (value == 27) location_ = false;
             else if (value == KEY_UP) locationIndex_ = std::max(0, locationIndex_ - 1);
             else if (value == KEY_DOWN) locationIndex_ = std::min(std::max(0, int(locations_.size()) - 1), locationIndex_ + 1);
-            else if (value == '/' || letter == 'p') openPrompt(Prompt::Path, value == '/' ? "/" : QString());
+            else if (value == '/' || letter == 'p') openPrompt(Prompt::Path, value == '/' ? "/" : String());
             else if (value == KEY_F(5)) locations_ = mountedLocations();
             else if ((value == 10 || value == KEY_ENTER) && !locations_.isEmpty()) selectRoot(locations_[locationIndex_].path);
             return;
@@ -863,14 +847,14 @@ class TerminalUI {
         }
         if (value == KEY_F(4)) { menu_ = (menu_ + 1) % 3;return; }
         const bool inTree=active_.session.view==View::Tree;
-        bool control = directControl || (menu_==1 && ((inTree?QString("btusgif"):QString("acdmnrsjvituf")).contains(QChar(letter))||value==13||value==10||value==KEY_ENTER||(value>=KEY_F(5)&&value<=KEY_F(9))||value==9));
-        alt = alt || (menu_==2 && ((inTree?QString("acgpisf"):QString("cmviskf")).contains(QChar(letter))||value==KEY_F(3)));menu_ = 0;
+        bool control = directControl || (menu_==1 && ((inTree?String("btusgif"):String("acdmnrsjvituf")).contains(Char(letter))||value==13||value==10||value==KEY_ENTER||(value>=KEY_F(5)&&value<=KEY_F(9))||value==9));
+        alt = alt || (menu_==2 && ((inTree?String("acgpisf"):String("cmviskf")).contains(Char(letter))||value==KEY_F(3)));menu_ = 0;
         if (value > 0 && value < 27 && value != 8 && value != 9 && value != 10 && value != 13) control = true;
         if (control && value > 0 && value < 27 && value != 9 && value != 10 && value != 13) value += 'a' - 1;
         if (extendedKey(value, alt, control, literal)) return;
         auto &s = active_.session;const bool tree = s.view == View::Tree;
         if (value == KEY_MOUSE) { mouse();return; }
-        if (alt && letter == 'f') { display_ = Display((int(display_) + 1) % 4);status_ = "File display: " + QStringList{"Name", "Name, size and attributes", "Details", "Long name"}[int(display_)]; }
+        if (alt && letter == 'f') { display_ = Display((int(display_) + 1) % 4);status_ = "File display: " + StringList{"Name", "Name, size and attributes", "Details", "Long name"}[int(display_)]; }
         else if (alt && letter == 's') { s.sort.key = SortKey((int(s.sort.key) + 1) % 10);s.rebuild();status_ = "Sort: " + sortLabel(s.sort); }
         else if (alt && letter == 'a' && tree) beginMetadata(false, false);
         else if (alt) status_ = "Not available in terminal mode; F1 shows supported commands";
@@ -895,7 +879,7 @@ class TerminalUI {
         else if (tree && (letter == '-' || letter == '_')) s.unlog();
         else if (tree && (value == KEY_F(5) || value == KEY_F(6))) s.toggleCollapse(value == KEY_F(5));
         else if (value == KEY_BACKSPACE || value == 127 || value == 8) {
-            s.returnToTree();if (s.directory != s.root) s.parent();else if (s.root != "/") load(false, true, QFileInfo(s.root).absolutePath(), true);
+            s.returnToTree();if (s.directory != s.root) s.parent();else if (s.root != "/") load(false, true, FileInfo(s.root).absolutePath(), true);
         } else if (value == KEY_UP) s.move(-1);else if (value == KEY_DOWN || value == ' ') s.move(1);
         else if (value == KEY_HOME) s.first();else if (value == KEY_END) s.last();
         else if (value == KEY_PPAGE || value == KEY_NPAGE) s.move((value == KEY_PPAGE ? -1 : 1) * (tree ? divider() - 2 : layout(2, listWidth()).capacity()));
@@ -906,7 +890,7 @@ class TerminalUI {
         else status_ = "Not available in terminal mode; F1 shows supported commands";
     }
 public:
-    TerminalUI(const QString &root, bool sizes, bool colors) : active_(root), sizes_(sizes), colors_(colors) { initializeTerminalHistories();load(false); }
+    TerminalUI(const String &root, bool sizes, bool colors) : active_(root), sizes_(sizes), colors_(colors) { initializeTerminalHistories();load(false); }
     ~TerminalUI() {
         saveTerminalHistories();
         if (cancel_) cancel_->store(true);
@@ -916,7 +900,7 @@ public:
     int run()
     {
         while (!quit_ && !stopped) {
-            QCoreApplication::processEvents();complete();publishGlobal();updateAutoview();viewerTick();draw();
+            TerminalApplication::processEvents();complete();publishGlobal();updateAutoview();viewerTick();draw();
             const auto input = keyboard_.read();
             if (input) key(input->value,input->alt,input->literal,input->control);
         }
@@ -924,7 +908,7 @@ public:
     }
 };
 }
-int runTerminal(const QString &root, bool treeSizes)
+int runTerminal(const String &root, bool treeSizes)
 {
     if (!::isatty(STDIN_FILENO) || !::isatty(STDOUT_FILENO)) { std::fprintf(stderr, "Terminal mode requires an interactive terminal on stdin and stdout.\n");return 2; }
     std::setlocale(LC_CTYPE, "");
@@ -963,8 +947,8 @@ int runTerminal(const QString &root, bool treeSizes)
     define_key("\x1b[1;3D", AltLeft);define_key("\x1b[1;3C", AltRight);define_key("\x1b[1;3H", AltHome);
     for (int n=1;n<=12;++n) {
         const char *codes[] = {"", "", "", "", "", "15", "17", "18", "19", "20", "21", "23", "24"};
-        const QByteArray prefix = n <= 4 ? QByteArray("\x1b[1;") : QByteArray("\x1b[")+codes[n]+";";
-        const QByteArray suffix = n <= 4 ? QByteArray(1,char('P'+n-1)) : QByteArray("~");
+        const Bytes prefix = n <= 4 ? Bytes("\x1b[1;") : Bytes("\x1b[")+codes[n]+";";
+        const Bytes suffix = n <= 4 ? Bytes(1,char('P'+n-1)) : Bytes("~");
         define_key((prefix+"5"+suffix).constData(),0x2100+n);
         define_key((prefix+"2"+suffix).constData(),0x2200+n);
         define_key((prefix+"3"+suffix).constData(),0x2500+n);

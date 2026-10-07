@@ -1,12 +1,13 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/scanner.h"
 
 namespace ltree {
 struct ViewDocument {
-    QByteArray bytes;
-    QString text, encoding, error;
-    QVector<qsizetype> lines;
+    Bytes bytes;
+    String text, encoding, error;
+    Vector<Index> lines;
     bool cancelled = false;
 };
-ViewDocument readViewDocument(const QString &path, const Cancellation &cancel, bool indexLines = true);
+ViewDocument readViewDocument(const String &path, const Cancellation &cancel, bool indexLines = true);
 }

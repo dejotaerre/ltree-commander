@@ -1,9 +1,5 @@
+#include "platform/platform.h"
 #include "fs/copyfiles.h"
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QSet>
-#include <QUuid>
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -15,10 +11,10 @@
 
 namespace ltree {
 namespace {
-struct Token { QChar character; bool insert=false; };
-QString maskSection(const QString &source,const QVector<Token> &tokens)
+struct Token { Char character; bool insert=false; };
+String maskSection(const String &source,const Vector<Token> &tokens)
 {
-    QString output;int position=0;
+    String output;int position=0;
     for(int i=0;i<tokens.size();++i){
         const auto token=tokens[i];const auto ch=token.character;
         if(ch=='*'){
@@ -38,11 +34,11 @@ struct Descriptor {
     ~Descriptor(){if(fd>=0)::close(fd);}
     void reset(int value){if(fd>=0)::close(fd);fd=value;}
 };
-int openDirectory(const QString &path,bool create,QStringList *created)
+int openDirectory(const String &path,bool create,StringList *created)
 {
-    Descriptor current(::open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC));QString prefix;
-    for(const auto &part:path.split('/',Qt::SkipEmptyParts)){
-        const auto bytes=QFile::encodeName(part);prefix+='/'+part;
+    Descriptor current(::open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC));String prefix;
+    for(const auto &part:path.split('/',TextOptions::SkipEmptyParts)){
+        const auto bytes=File::encodeName(part);prefix+='/'+part;
         int next=::openat(current.fd,bytes.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
         if(next<0 && errno==ENOENT && create){
             if(::mkdirat(current.fd,bytes.constData(),0777)==0)created->append(prefix);
@@ -54,7 +50,7 @@ int openDirectory(const QString &path,bool create,QStringList *created)
     }
     const int fd=current.fd;current.fd=-1;return fd;
 }
-QString systemError(const QString &action){return action+": "+QString::fromLocal8Bit(std::strerror(errno));}
+String systemError(const String &action){return action+": "+String::fromLocal8Bit(std::strerror(errno));}
 bool sameFile(const struct stat &a,const struct stat &b){return a.st_dev==b.st_dev && a.st_ino==b.st_ino;}
 bool older(const struct stat &a,const struct stat &b){return a.st_mtim.tv_sec<b.st_mtim.tv_sec || (a.st_mtim.tv_sec==b.st_mtim.tv_sec && a.st_mtim.tv_nsec<b.st_mtim.tv_nsec);}
 bool sameContents(const struct stat &a,const struct stat &b)
@@ -65,19 +61,19 @@ bool unchanged(const struct stat &a,const struct stat &b)
 {
     return sameContents(a,b) && a.st_ctim.tv_sec==b.st_ctim.tv_sec && a.st_ctim.tv_nsec==b.st_ctim.tv_nsec;
 }
-bool restoreSource(int parent,const QByteArray &staged,const QByteArray &name,const QString &path,CopyResult &result)
+bool restoreSource(int parent,const Bytes &staged,const Bytes &name,const String &path,CopyResult &result)
 {
     if(::syscall(SYS_renameat2,parent,staged.constData(),parent,name.constData(),RENAME_NOREPLACE)==0)return true;
-    result.error+="; source preserved at "+QDir(QFileInfo(path).absolutePath()).filePath(QString::fromLocal8Bit(staged))+": "+QString::fromLocal8Bit(std::strerror(errno));
+    result.error+="; source preserved at "+DirectoryPath(FileInfo(path).absolutePath()).filePath(String::fromLocal8Bit(staged))+": "+String::fromLocal8Bit(std::strerror(errno));
     return false;
 }
-bool stageSource(int parent,const QByteArray &name,const struct stat &expected,const QString &path,QByteArray &staged,CopyResult &result)
+bool stageSource(int parent,const Bytes &name,const struct stat &expected,const String &path,Bytes &staged,CopyResult &result)
 {
     struct stat current{};
     if(::fstatat(parent,name.constData(),&current,AT_SYMLINK_NOFOLLOW)<0 || !unchanged(expected,current)){
         result.error="Source changed; it was not removed";return false;
     }
-    staged=QFile::encodeName(".ltree-move-"+QUuid::createUuid().toString(QUuid::Id128));
+    staged=File::encodeName(".ltree-move-"+Uuid::createUuid().toString(Uuid::Id128));
     if(::syscall(SYS_renameat2,parent,name.constData(),parent,staged.constData(),RENAME_NOREPLACE)<0){
         result.error=systemError("Cannot move source file");return false;
     }
@@ -88,24 +84,24 @@ bool stageSource(int parent,const QByteArray &name,const struct stat &expected,c
     return true;
 }
 
-CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,bool move=false)
+CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,bool move=false)
 {
     CopyResult result;result.target=entry.target;
-    if(entry.source.contains(QChar(0)) || entry.target.contains(QChar(0)) || !QDir::isAbsolutePath(entry.target) ||
-       entry.source!=QDir::cleanPath(entry.source) || entry.target!=QDir::cleanPath(entry.target) || !isWithin(entry.source,sourceRoot)){
+    if(entry.source.contains(Char(0)) || entry.target.contains(Char(0)) || !DirectoryPath::isAbsolutePath(entry.target) ||
+       entry.source!=DirectoryPath::cleanPath(entry.source) || entry.target!=DirectoryPath::cleanPath(entry.target) || !isWithin(entry.source,sourceRoot)){
         result.error="Invalid source or destination path";return result;
     }
     if(cancel->load()){result.cancelled=true;return result;}
-    Descriptor sourceParent(openDirectory(QFileInfo(entry.source).absolutePath(),false,nullptr));
+    Descriptor sourceParent(openDirectory(FileInfo(entry.source).absolutePath(),false,nullptr));
     if(sourceParent.fd<0){result.error=systemError("Cannot open source directory");return result;}
-    const QByteArray sourceName=QFile::encodeName(QFileInfo(entry.source).fileName());
+    const Bytes sourceName=File::encodeName(FileInfo(entry.source).fileName());
     Descriptor source(::openat(sourceParent.fd,sourceName.constData(),(move?O_PATH:O_RDONLY|O_NONBLOCK)|O_NOFOLLOW|O_CLOEXEC));
     struct stat info{};
     if(source.fd<0 || ::fstat(source.fd,&info)<0){result.error=systemError("Cannot open source file (links are not followed)");return result;}
     if(!S_ISREG(info.st_mode)){result.error=move?"Moving this file type is not implemented yet":"Copying this file type is not implemented yet";return result;}
-    Descriptor destination(openDirectory(QFileInfo(entry.target).absolutePath(),true,&result.created));
+    Descriptor destination(openDirectory(FileInfo(entry.target).absolutePath(),true,&result.created));
     if(destination.fd<0){result.error=systemError("Cannot create destination directory (links are not followed)");return result;}
-    QByteArray target=QFile::encodeName(QFileInfo(entry.target).fileName());struct stat existing{};
+    Bytes target=File::encodeName(FileInfo(entry.target).fileName());struct stat existing{};
     bool present=::fstatat(destination.fd,target.constData(),&existing,AT_SYMLINK_NOFOLLOW)==0;
     if(!present && errno!=ENOENT){result.error=systemError("Cannot inspect destination");return result;}
     if(present && sameFile(info,existing)){result.error="Source and destination are the same file";return result;}
@@ -113,12 +109,12 @@ CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace 
     if(present && replace==CopyReplace::Ask){result.exists=true;return result;}
     if(present && (replace==CopyReplace::Never || (replace==CopyReplace::Older && !older(existing,info)))){result.skipped=true;return result;}
     if(present && replace==CopyReplace::Rename){
-        const QString original=QFileInfo(entry.target).fileName();const int dot=int(original.lastIndexOf('.'));
-        const QString stem=dot>0?original.left(dot):original,ext=dot>0?original.mid(dot):QString{};
+        const String original=FileInfo(entry.target).fileName();const int dot=int(original.lastIndexOf('.'));
+        const String stem=dot>0?original.left(dot):original,ext=dot>0?original.mid(dot):String{};
         int ordinal=2;
         do{
-            const auto name=stem+QString("(%1)").arg(ordinal++)+ext;target=QFile::encodeName(name);
-            result.target=QDir(QFileInfo(entry.target).absolutePath()).filePath(name);
+            const auto name=stem+String("(%1)").arg(ordinal++)+ext;target=File::encodeName(name);
+            result.target=DirectoryPath(FileInfo(entry.target).absolutePath()).filePath(name);
             present=::fstatat(destination.fd,target.constData(),&existing,AT_SYMLINK_NOFOLLOW)==0;
             if(!present && errno!=ENOENT){result.error=systemError("Cannot inspect destination");return result;}
         }while(present && ordinal<100000);
@@ -130,7 +126,7 @@ CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace 
         if(!existsNow && errno!=ENOENT){result.error=systemError("Cannot inspect destination");return result;}
         if(existsNow && (!S_ISREG(current.st_mode) || sameFile(info,current))){result.error="Destination changed or is the source file";return result;}
         if(existsNow && replace==CopyReplace::Older && !older(current,info)){result.skipped=true;return result;}
-        QByteArray staged;
+        Bytes staged;
         if(!stageSource(sourceParent.fd,sourceName,info,entry.source,staged,result))return result;
         if(cancel->load()){
             result.cancelled=true;restoreSource(sourceParent.fd,staged,sourceName,entry.source,result);return result;
@@ -154,7 +150,7 @@ CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace 
         if(source.fd<0){result.error=systemError("Cannot read source for cross-filesystem move");return result;}
         if(::fstat(source.fd,&info)<0 || !unchanged(restored,info)){result.error="Source changed; it was not removed";return result;}
     }
-    const QByteArray temporary=QFile::encodeName(".ltree-copy-"+QUuid::createUuid().toString(QUuid::Id128));
+    const Bytes temporary=File::encodeName(".ltree-copy-"+Uuid::createUuid().toString(Uuid::Id128));
     Descriptor output(::openat(destination.fd,temporary.constData(),O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC,0600));
     if(output.fd<0){result.error=systemError("Cannot create copy");return result;}
     // La copia temporal evita truncar destinos; solo se publica tras completar datos y metadatos.
@@ -198,7 +194,7 @@ CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace 
     if(move){
         if(::fsync(destination.fd)<0){result.error=systemError("Copy complete; source retained because destination synchronization failed");return result;}
         if(cancel->load()){result.cancelled=true;return result;}
-        QByteArray staged;
+        Bytes staged;
         if(!stageSource(sourceParent.fd,sourceName,info,entry.source,staged,result)){
             result.error="Copy complete; source retained: "+result.error;return result;
         }
@@ -215,10 +211,10 @@ CopyResult copyOne(const QString &sourceRoot,const CopyEntry &entry,CopyReplace 
 }
 }
 
-QString copyName(const QString &name,const QString &input,CopyCase letterCase,QString *error)
+String copyName(const String &name,const String &input,CopyCase letterCase,String *error)
 {
-    error->clear();const QString mask=input.isEmpty()?QString("*.*"):input;
-    QVector<Token> parts[2];bool insertion=false;int separator=-1;
+    error->clear();const String mask=input.isEmpty()?String("*.*"):input;
+    Vector<Token> parts[2];bool insertion=false;int separator=-1;
     for(int i=0;i<mask.size();++i){
         const auto ch=mask[i];
         if(ch=='<'){if(insertion){*error="Invalid insertion pair in mask";return {};}insertion=true;}
@@ -231,7 +227,7 @@ QString copyName(const QString &name,const QString &input,CopyCase letterCase,QS
         const auto ch=mask[i];
         if(i==separator){section=1;continue;}
         if(ch=='<'){insertion=true;continue;}if(ch=='>'){insertion=false;continue;}
-        if(ch==QChar(0) || ch=='|' || ch==':' || ch=='"' || ch=='\\'){
+        if(ch==Char(0) || ch=='|' || ch==':' || ch=='"' || ch=='\\'){
             *error="Sequences, find/replace and piped masks are not implemented yet";return {};
         }
         parts[section].append({ch,insertion});
@@ -239,32 +235,32 @@ QString copyName(const QString &name,const QString &input,CopyCase letterCase,QS
     for(const auto &part:parts){int stars=0;for(const auto &token:part)if(token.character=='*')++stars;
         if(stars>1){*error="Only one asterisk per mask section is allowed";return {};}}
     const int dot=int(name.lastIndexOf('.'));
-    QString result=maskSection(dot>0?name.left(dot):name,parts[0]);
-    const QString extension=maskSection(dot>0?name.mid(dot+1):QString{},parts[1]);
+    String result=maskSection(dot>0?name.left(dot):name,parts[0]);
+    const String extension=maskSection(dot>0?name.mid(dot+1):String{},parts[1]);
     if(!extension.isEmpty())result+='.'+extension;
     if(letterCase==CopyCase::Lower)result=result.toLower();else if(letterCase==CopyCase::Upper)result=result.toUpper();
-    if(result.isEmpty() || result=="." || result==".." || result.contains('/') || result.contains(QChar(0))){*error="The mask produces an invalid filename";return {};}
+    if(result.isEmpty() || result=="." || result==".." || result.contains('/') || result.contains(Char(0))){*error="The mask produces an invalid filename";return {};}
     return result;
 }
 
-CopyPlan planCopy(const QVector<FileEntry> &files,const QString &sourceDirectory,const QString &destination,CopyPaths paths,const QString &mask,CopyCase letterCase)
+CopyPlan planCopy(const Vector<FileEntry> &files,const String &sourceDirectory,const String &destination,CopyPaths paths,const String &mask,CopyCase letterCase)
 {
-    CopyPlan result;QSet<QString> targets,sources;
-    if(destination.isEmpty() || destination.contains(QChar(0)) || !QDir::isAbsolutePath(destination)){
+    CopyPlan result;Set<String> targets,sources;
+    if(destination.isEmpty() || destination.contains(Char(0)) || !DirectoryPath::isAbsolutePath(destination)){
         result.error="Enter an absolute destination directory";return result;
     }
     for(const auto &file:files)sources.insert(file.path);
     for(const auto &file:files){
-        const QString name=copyName(file.name,mask,letterCase,&result.error);if(!result.error.isEmpty())return result;
-        QString relative;
-        if(paths==CopyPaths::Full)relative=QFileInfo(file.path).absolutePath().mid(1);
+        const String name=copyName(file.name,mask,letterCase,&result.error);if(!result.error.isEmpty())return result;
+        String relative;
+        if(paths==CopyPaths::Full)relative=FileInfo(file.path).absolutePath().mid(1);
         else if(paths!=CopyPaths::Flat){
             if(!isWithin(file.path,sourceDirectory)){result.error="A tagged file is outside the source branch";return result;}
-            relative=QDir(sourceDirectory).relativeFilePath(QFileInfo(file.path).absolutePath());
+            relative=DirectoryPath(sourceDirectory).relativeFilePath(FileInfo(file.path).absolutePath());
             if(relative==".")relative.clear();
-            if(paths==CopyPaths::Current)relative=QFileInfo(sourceDirectory).fileName()+(relative.isEmpty()?QString{}:'/'+relative);
+            if(paths==CopyPaths::Current)relative=FileInfo(sourceDirectory).fileName()+(relative.isEmpty()?String{}:'/'+relative);
         }
-        const QString target=QDir::cleanPath(QDir(destination).filePath((relative.isEmpty()?QString{}:relative+'/')+name));
+        const String target=DirectoryPath::cleanPath(DirectoryPath(destination).filePath((relative.isEmpty()?String{}:relative+'/')+name));
         if(targets.contains(target)){result.error="The mask maps multiple files to the same destination: "+target;return result;}
         if(sources.contains(target)){result.error="A destination is also a source file: "+target;return result;}
         targets.insert(target);result.entries.append({file.path,target});
@@ -272,23 +268,23 @@ CopyPlan planCopy(const QVector<FileEntry> &files,const QString &sourceDirectory
     return result;
 }
 
-CopyResult copyFile(const QString &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
+CopyResult copyFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
 {
     auto result=copyOne(sourceRoot,entry,replace,cancel);
-    QSet<QString> affected;
-    for(const auto &path:result.created)affected.insert(QFileInfo(path).absolutePath());
-    if(result.copied)affected.insert(QFileInfo(result.target).absolutePath());
+    Set<String> affected;
+    for(const auto &path:result.created)affected.insert(FileInfo(path).absolutePath());
+    if(result.copied)affected.insert(FileInfo(result.target).absolutePath());
     const auto refresh=std::make_shared<std::atomic_bool>(false);
     for(const auto &path:affected)result.scan.directories+=scanDirectories(path,false,refresh).directories;
     return result;
 }
-CopyResult moveFile(const QString &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
+CopyResult moveFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
 {
     auto result=copyOne(sourceRoot,entry,replace,cancel,true);
-    QSet<QString> affected;
-    for(const auto &path:result.created)affected.insert(QFileInfo(path).absolutePath());
-    if(result.copied || result.moved)affected.insert(QFileInfo(result.target).absolutePath());
-    affected.insert(QFileInfo(entry.source).absolutePath());
+    Set<String> affected;
+    for(const auto &path:result.created)affected.insert(FileInfo(path).absolutePath());
+    if(result.copied || result.moved)affected.insert(FileInfo(result.target).absolutePath());
+    affected.insert(FileInfo(entry.source).absolutePath());
     const auto refresh=std::make_shared<std::atomic_bool>(false);
     for(const auto &path:affected)result.scan.directories+=scanDirectories(path,false,refresh).directories;
     return result;

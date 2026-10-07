@@ -1,13 +1,14 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/scanner.h"
 
 namespace ltree {
 struct MakeDirectoryResult {
-    QString path;
-    QString error;
-    QStringList created;
+    String path;
+    String error;
+    StringList created;
     ScanResult scan;
     bool cancelled = false;
 };
-MakeDirectoryResult makeDirectory(const QString &base, const QString &name, const Cancellation &cancel);
+MakeDirectoryResult makeDirectory(const String &base, const String &name, const Cancellation &cancel);
 }

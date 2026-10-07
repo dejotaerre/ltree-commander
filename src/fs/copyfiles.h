@@ -1,21 +1,22 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/scanner.h"
 
 namespace ltree {
 enum class CopyPaths { Full, Current, Relative, Flat };
 enum class CopyReplace { Ask, Always, Older, Never, Rename };
 enum class CopyCase { Keep, Lower, Upper };
-struct CopyEntry { QString source, target; };
-struct CopyPlan { QVector<CopyEntry> entries; QString error; };
+struct CopyEntry { String source, target; };
+struct CopyPlan { Vector<CopyEntry> entries; String error; };
 struct CopyResult {
-    QString target, error;
+    String target, error;
     bool copied=false, moved=false, exists=false, skipped=false, cancelled=false;
-    QStringList created;
+    StringList created;
     ScanResult scan;
 };
-QString copyName(const QString &name, const QString &mask, CopyCase letterCase, QString *error);
-CopyPlan planCopy(const QVector<FileEntry> &files, const QString &sourceDirectory, const QString &destination,
-                  CopyPaths paths, const QString &mask, CopyCase letterCase);
-CopyResult copyFile(const QString &sourceRoot, const CopyEntry &entry, CopyReplace replace, const Cancellation &cancel);
-CopyResult moveFile(const QString &sourceRoot, const CopyEntry &entry, CopyReplace replace, const Cancellation &cancel);
+String copyName(const String &name, const String &mask, CopyCase letterCase, String *error);
+CopyPlan planCopy(const Vector<FileEntry> &files, const String &sourceDirectory, const String &destination,
+                  CopyPaths paths, const String &mask, CopyCase letterCase);
+CopyResult copyFile(const String &sourceRoot, const CopyEntry &entry, CopyReplace replace, const Cancellation &cancel);
+CopyResult moveFile(const String &sourceRoot, const CopyEntry &entry, CopyReplace replace, const Cancellation &cancel);
 }

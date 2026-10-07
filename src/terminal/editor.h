@@ -1,7 +1,6 @@
 #pragma once
-#include <QStringList>
-#include <QByteArray>
+#include "platform/platform.h"
 namespace ltree {
-QStringList terminalEditorCommand(QString *error = nullptr);
-bool terminalBinaryData(const QByteArray &bytes);
+StringList terminalEditorCommand(String *error = nullptr);
+bool terminalBinaryData(const Bytes &bytes);
 }

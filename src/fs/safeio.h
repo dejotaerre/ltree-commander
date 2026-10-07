@@ -1,7 +1,5 @@
 #pragma once
-#include <QDir>
-#include <QFile>
-#include <QUuid>
+#include "platform/platform.h"
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -17,13 +15,13 @@ struct Fd {
     Fd(const Fd &) = delete;
     Fd &operator=(const Fd &) = delete;
 };
-inline QString error() { return QString::fromLocal8Bit(std::strerror(errno)); }
-inline int directory(const QString &path, bool create = false)
+inline String error() { return String::fromLocal8Bit(std::strerror(errno)); }
+inline int directory(const String &path, bool create = false)
 {
-    if(!QDir::isAbsolutePath(path) || path.contains(QChar(0))) { errno=EINVAL; return -1; }
+    if(!DirectoryPath::isAbsolutePath(path) || path.contains(Char(0))) { errno=EINVAL; return -1; }
     int fd=::open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC);
-    for(const auto &part:QDir::cleanPath(path).split('/',Qt::SkipEmptyParts)) {
-        const auto name=QFile::encodeName(part);
+    for(const auto &part:DirectoryPath::cleanPath(path).split('/',TextOptions::SkipEmptyParts)) {
+        const auto name=File::encodeName(part);
         int next=::openat(fd,name.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
         if(next<0 && errno==ENOENT && create) {
             if(::mkdirat(fd,name.constData(),0777)<0 && errno!=EEXIST) { const int e=errno;::close(fd);errno=e;return -1; }
@@ -34,8 +32,8 @@ inline int directory(const QString &path, bool create = false)
     }
     return fd;
 }
-inline QByteArray temporaryName() { return (".ltree-"+QUuid::createUuid().toString(QUuid::WithoutBraces)).toLatin1(); }
-inline bool publish(int parent,const QByteArray &temporary,const QByteArray &name,bool replace)
+inline Bytes temporaryName() { return (".ltree-"+Uuid::createUuid().toString(Uuid::WithoutBraces)).toLatin1(); }
+inline bool publish(int parent,const Bytes &temporary,const Bytes &name,bool replace)
 {
     struct stat st{};
     if(::fstatat(parent,name.constData(),&st,AT_SYMLINK_NOFOLLOW)==0 && (!S_ISREG(st.st_mode) || !replace)) { errno=EEXIST;return false; }

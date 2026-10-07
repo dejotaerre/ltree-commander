@@ -1,6 +1,6 @@
 void sortCommand() {
   auto &s = active_.session;
-  QStringList names{"Name",
+  StringList names{"Name",
                     "Extension",
                     "Date",
                     "Time",
@@ -38,7 +38,7 @@ void sortCommand() {
 }
 void globalCommand(bool tagged) {
   roots_.insert(active_.session.root, active_);
-  QVector<Session> sessions;
+  Vector<Session> sessions;
   for (auto it = roots_.cbegin(); it != roots_.cend(); ++it)
     sessions << it->session;
   if (other_)
@@ -50,7 +50,7 @@ void globalCommand(bool tagged) {
 }
 void cycleRoot(int direction) {
   roots_.insert(active_.session.root, active_);
-  QStringList paths = roots_.keys();
+  StringList paths = roots_.keys();
   if (other_ && !paths.contains(other_->session.root)) {
     roots_.insert(other_->session.root, *other_);
     paths = roots_.keys();
@@ -72,7 +72,7 @@ void availability() {
   for (int i = 0; i < locations_.size(); ++i)
     if (locations_[i].path == stats.mount)
       locationIndex_ = i;
-  status_ = QString("%1 %2  Capacity %3 bytes  Available %4 bytes")
+  status_ = String("%1 %2  Capacity %3 bytes  Available %4 bytes")
                 .arg(stats.mount, stats.filesystem)
                 .arg(stats.capacity)
                 .arg(stats.available);
@@ -83,44 +83,44 @@ void statsCommand() {
   while (!stopped) {
     auto system = systemStatistics(active_.session.directory);
     auto logged = loggedStatistics(active_.session);
-    QStringList lines{
+    StringList lines{
         "DISK STATISTICS                           LOGGED FILE STATISTICS",
         "Mount: " + system.mount,
         "Source: " + system.source,
         "File system: " + system.filesystem,
-        QString(
+        String(
             "Capacity: %1 bytes                   Total files: %2 / %3 bytes")
             .arg(system.capacity)
             .arg(logged.totalFiles)
             .arg(logged.totalBytes),
-        QString("Available: %1 bytes                  Matching: %2 / %3 bytes")
+        String("Available: %1 bytes                  Matching: %2 / %3 bytes")
             .arg(system.available)
             .arg(logged.matchingFiles)
             .arg(logged.matchingBytes),
-        QString("Used: %1 bytes                       Tagged: %2 / %3 bytes")
+        String("Used: %1 bytes                       Tagged: %2 / %3 bytes")
             .arg(system.capacity - system.free)
             .arg(logged.taggedFiles)
             .arg(logged.taggedBytes),
-        QString("Block size: %1 bytes                 Directories logged: %2")
+        String("Block size: %1 bytes                 Directories logged: %2")
             .arg(system.blockSize)
             .arg(logged.directories),
-        QString("Total blocks: %1                     Displayed: %2 / %3 bytes")
+        String("Total blocks: %1                     Displayed: %2 / %3 bytes")
             .arg(system.totalBlocks)
             .arg(logged.displayedFiles)
             .arg(logged.displayedBytes),
         "",
         "SYSTEM INFORMATION                       DISPLAY INFORMATION",
-        QString("RAM total: %1 MiB                    Cols %2 Rows %3")
+        String("RAM total: %1 MiB                    Cols %2 Rows %3")
             .arg(system.ramTotal / 1048576)
             .arg(columns_)
             .arg(rows_),
-        QString("RAM available: %1 MiB                List height %2")
+        String("RAM available: %1 MiB                List height %2")
             .arg(system.ramAvailable / 1048576)
             .arg(end() - 2),
-        QString("Committed: %1 MiB / %2 MiB")
+        String("Committed: %1 MiB / %2 MiB")
             .arg(system.committed / 1048576)
             .arg(system.commitLimit / 1048576),
-        QString("CPU speed: %1 MHz").arg(system.cpuMHz),
+        String("CPU speed: %1 MHz").arg(system.cpuMHz),
         "CPU type: " + system.cpuType,
         "",
         "LOGON INFORMATION",
@@ -167,17 +167,17 @@ void drawInfoBox() {
                                    : s.currentFile()->path);
   int w = std::min(51, columns_ - 4), x = columns_ - w - 2,
       y = std::max(3, end() - 12);
-  QStringList lines{
+  StringList lines{
       "FILE INFORMATION",
-      QFileInfo(metadata.path).fileName(),
+      FileInfo(metadata.path).fileName(),
       "Owner: " + metadata.owner + "  Group: " + metadata.group,
       "Permissions: " + permissionText(metadata.mode),
-      "Size: " + QString::number(metadata.size) + " bytes",
+      "Size: " + String::number(metadata.size) + " bytes",
       "Written: " + metadata.modified.toString("yyyy-MM-dd HH:mm:ss"),
       "Accessed: " + metadata.accessed.toString("yyyy-MM-dd HH:mm:ss"),
       "Changed: " + metadata.changed.toString("yyyy-MM-dd HH:mm:ss"),
       "Created: " + metadata.created.toString("yyyy-MM-dd HH:mm:ss"),
-      QString("Inode: %1  Links: %2").arg(metadata.inode).arg(metadata.links),
+      String("Inode: %1  Links: %2").arg(metadata.inode).arg(metadata.links),
       metadata.linkTarget.isEmpty() ? metadata.type
                                     : "Link: " + metadata.linkTarget};
   for (int i = 0; i < lines.size() && y + i < end(); ++i) {

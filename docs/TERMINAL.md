@@ -4,6 +4,12 @@ Run `ltc --terminal [directory]` in a terminal or over SSH. The same filesystem 
 
 Each terminal launch starts an independent session. Multiple terminals and SSH sessions can run LTC at the same time without `--new-instance`. Single-instance activation applies only to graphical windows.
 
+## Terminal-only builds
+
+The default executable supports both interfaces. Configure a separate build with `-DLTREE_BUILD_GUI=OFF` to omit all graphical dependencies and keep the existing graphical build intact. This executable always starts in terminal mode, including from a desktop session.
+
+For a terminal-only executable, configure with `-DLTREE_BUILD_GUI=OFF`. Qt is then unnecessary for both compilation and execution. This build uses C++/POSIX, ICU, PCRE2, nlohmann JSON, libarchive and ncursesw while retaining the shared filesystem engines. See the [build guide](BUILD.md#build-only-the-terminal-interface) for package lists and commands. The default combined build keeps Qt for its graphical interface.
+
 ## Keyboard menus
 
 Kitty's extended keyboard protocol is detected automatically, including over SSH. Hold Ctrl or Alt to display its command menu; releasing the modifier restores the normal menu. Pressing a command while holding the modifier runs that command. This also works in the viewer. No Kitty configuration changes are required.

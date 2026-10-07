@@ -1,4 +1,4 @@
-QString shellQuote(QString value) const {
+String shellQuote(String value) const {
   value.replace('\'', "'\\''");
   return "'" + value + "'";
 }
@@ -41,7 +41,7 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
       ((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'))) {
     auto spell = tree ? s.treeSpell : s.fileSpell;
     const char32_t cp = value;
-    spell += QString::fromUcs4(&cp, 1);
+    spell += String::fromUcs4(&cp, 1);
     if (!s.spell(spell))
       status_ = "No match";
     return true;
@@ -266,7 +266,7 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
       readDocument(viewPaths_.first());
     } else if (s.currentFile()) {
       if (alt) {
-        auto command = qEnvironmentVariable("LTREE_ALT_VIEWER");
+        auto command = environment("LTREE_ALT_VIEWER");
         if (command.isEmpty())
           status_ = "Set LTREE_ALT_VIEWER to a terminal program";
         else
@@ -281,7 +281,7 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
   if (letter == 'f' && !alt && !control) {
     auto value = ask("FILESPEC: ", s.filespec.text(), "filespec");
     if (value) {
-      QString error;
+      String error;
       if (s.filespec.set(*value, &error)) {
         s.rebuild();
         filespecHistory_ = histories_["filespec"].entries;
@@ -294,7 +294,7 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
       ((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'))) {
     auto spell = tree ? s.treeSpell : s.fileSpell;
     const char32_t cp = value;
-    spell += QString::fromUcs4(&cp, 1);
+    spell += String::fromUcs4(&cp, 1);
     if (!s.spell(spell))
       status_ = "No match";
     return true;
@@ -316,28 +316,28 @@ void drawSidebar(const Pane &pane, int x, int w) {
   const auto &s = pane.session;
   const auto counts = loggedStatistics(s);
   auto stats = systemStatistics(s.directory);
-  QStringList lines{"FILE " + s.filespec.text(),
+  StringList lines{"FILE " + s.filespec.text(),
                     "",
                     "DISK " + stats.filesystem,
                     "Available",
-                    QString::number(stats.available),
+                    String::number(stats.available),
                     "",
                     "LOGGED Statistics",
                     "Total",
-                    QString("Files %1").arg(counts.totalFiles),
-                    QString("Bytes %1").arg(counts.totalBytes),
+                    String("Files %1").arg(counts.totalFiles),
+                    String("Bytes %1").arg(counts.totalBytes),
                     "Matching",
-                    QString("Files %1").arg(counts.matchingFiles),
-                    QString("Bytes %1").arg(counts.matchingBytes),
+                    String("Files %1").arg(counts.matchingFiles),
+                    String("Bytes %1").arg(counts.matchingBytes),
                     "Tagged",
-                    QString("Files %1").arg(counts.taggedFiles),
-                    QString("Bytes %1").arg(counts.taggedBytes),
+                    String("Files %1").arg(counts.taggedFiles),
+                    String("Bytes %1").arg(counts.taggedBytes),
                     "",
                     "Current Directory",
-                    QFileInfo(s.directory).fileName()};
+                    FileInfo(s.directory).fileName()};
   if (s.view != View::Tree && s.currentFile()) {
     lines << "Current File" << s.currentFile()->name
-          << QString("Bytes %1").arg(s.currentFile()->size);
+          << String("Bytes %1").arg(s.currentFile()->size);
   }
   for (int y = 1; y <= end(); ++y)
     text(x, y, "│", 1, 1);
@@ -362,7 +362,7 @@ void publishGlobal() {
 bool documentReload_ = false, previewForward_ = false, previewDrawing_ = false,
      documentPreview_ = false;
 int documentTop_ = 0;
-qsizetype previewHit_ = -1, previewHitLength_ = 0;
+Index previewHit_ = -1, previewHitLength_ = 0;
 void forwardPreviewKey(int key, bool alt = false, bool literal = false) {
   if (previewReading_ || previewed_.bytes.isEmpty())
     return;
@@ -371,7 +371,7 @@ void forwardPreviewKey(int key, bool alt = false, bool literal = false) {
   auto snapshot = viewerSnapshot_;
   int top = viewerTop_;
   bool hex = hex_;
-  qsizetype hit = hit_, length = hitLength_;
+  Index hit = hit_, length = hitLength_;
   viewed_ = previewed_;
   viewerPath_ = previewPath_;
   viewerSnapshot_ = hexSnapshot(previewPath_);
@@ -415,9 +415,9 @@ void drawStyledPreview(int x, int w) {
       int offset = (previewTop_ + r) * bytes;
       if (offset >= doc.bytes.size())
         break;
-      QString line;
+      String line;
       for (unsigned char ch : doc.bytes.mid(offset, bytes))
-        line += QString::number(ch).rightJustified(3) + " ";
+        line += String::number(ch).rightJustified(3) + " ";
       text(x, 3 + r, line, viewerTextPair_, w);
     }
   } else {
@@ -428,9 +428,9 @@ void drawStyledPreview(int x, int w) {
         std::clamp(previewTop_, 0, std::max(0, int(viewerLines_.size()) - 1));
     int y = 3;
     if (viewerRuler_) {
-      QString ruler;
+      String ruler;
       for (int i = 0; i < w; ++i)
-        ruler += QChar('0' + ((viewerHorizontal_ + i + 1) % 10));
+        ruler += Char('0' + ((viewerHorizontal_ + i + 1) % 10));
       text(x, y++, ruler, 1, w);
     }
     for (int r = 0; y + r < end() - 1 && previewTop_ + r < viewerLines_.size();
@@ -445,7 +445,7 @@ void drawStyledPreview(int x, int w) {
   previewDrawing_ = false;
 }
 
-QString operationRoot(const QString &path) const {
+String operationRoot(const String &path) const {
   if (isWithin(path, active_.session.root))
     return active_.session.root;
   if (other_ && isWithin(path, other_->session.root))
@@ -453,10 +453,10 @@ QString operationRoot(const QString &path) const {
   for (auto it = roots_.cbegin(); it != roots_.cend(); ++it)
     if (isWithin(path, it.key()))
       return it.key();
-  return QFileInfo(path).absolutePath();
+  return FileInfo(path).absolutePath();
 }
 void spellCommand() {
-  QString input;
+  String input;
   while (!stopped) {
     draw();
     fill(0, rows_ - 2, columns_, 1);
@@ -476,7 +476,7 @@ void spellCommand() {
       continue;
     } else if (literal && k >= 32 && k != 127) {
       const char32_t cp = k;
-      input += QString::fromUcs4(&cp, 1);
+      input += String::fromUcs4(&cp, 1);
     }
     if (!active_.session.spell(input))
       status_ = "No match";
@@ -484,34 +484,34 @@ void spellCommand() {
 }
 
 void saveViewerHistory() {
-  QJsonArray search, gather;
+  JsonArray search, gather;
   for (auto it = histories_["search"].entries.crbegin();
        it != histories_["search"].entries.crend(); ++it)
     search.append(*it);
   for (auto it = histories_["gather"].entries.crbegin();
        it != histories_["gather"].entries.crend(); ++it)
     gather.append(*it);
-  QSaveFile file(historyDirectory() + "/viewer-history.json");
-  if (!file.open(QIODevice::WriteOnly))
+  SaveFile file(historyDirectory() + "/viewer-history.json");
+  if (!file.open(IO::WriteOnly))
     return;
-  file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+  file.setPermissions(File::ReadOwner | File::WriteOwner);
   auto bytes =
-      QJsonDocument(
-          QJsonObject{{"version", 1}, {"search", search}, {"gather", gather}})
+      JsonDocument(
+          JsonObject{{"version", 1}, {"search", search}, {"gather", gather}})
           .toJson();
   if (file.write(bytes) == bytes.size())
     file.commit();
 }
 
-QString terminalByteGlyph(quint8 value) const {
+String terminalByteGlyph(uint8 value) const {
   if (viewerCharset_ != 2 && viewerCharset_ != 6)
     return dosGlyph(value);
-  static QMap<int, QString> tables;
+  static Map<int, String> tables;
   if (!tables.contains(viewerCharset_)) {
-    QByteArray input;
+    Bytes input;
     for (int i = 0; i < 256; ++i)
       input.append(char(i));
-    QByteArray output(1040, '\0');
+    Bytes output(1040, '\0');
     char *in = input.data(), *out = output.data();
     size_t left = input.size(), capacity = output.size();
     auto converter =
@@ -528,11 +528,11 @@ QString terminalByteGlyph(quint8 value) const {
       iconv_close(converter);
     }
     tables[viewerCharset_] =
-        QString::fromUtf8(output.constData(), out - output.data());
+        String::fromUtf8(output.constData(), out - output.data());
   }
-  return QString(value < tables[viewerCharset_].size()
+  return String(value < tables[viewerCharset_].size()
                      ? tables[viewerCharset_][value]
-                     : QChar('.'));
+                     : Char('.'));
 }
 
 void showHelp(HelpTopic topic) {
@@ -548,15 +548,15 @@ void showHelp(HelpTopic topic) {
   prompt_ = previousPrompt;
 }
 
-std::optional<QString> browseDirectory(QString path) {
+std::optional<String> browseDirectory(String path) {
   path = absolute(path);
-  if (!QFileInfo(path).isDir())
+  if (!FileInfo(path).isDir())
     path = active_.session.directory;
   while (!stopped) {
-    QStringList labels{"Use this directory", ".."};
-    auto children = QDir(path).entryList(QDir::Dirs | QDir::NoDotAndDotDot |
-                                             QDir::NoSymLinks | QDir::Readable,
-                                         QDir::Name);
+    StringList labels{"Use this directory", ".."};
+    auto children = DirectoryPath(path).entryList(DirectoryPath::Dirs | DirectoryPath::NoDotAndDotDot |
+                                             DirectoryPath::NoSymLinks | DirectoryPath::Readable,
+                                         DirectoryPath::Name);
     labels += children;
     int picked = choose("BROWSE: " + path, labels);
     if (picked < 0)
@@ -564,9 +564,9 @@ std::optional<QString> browseDirectory(QString path) {
     if (picked == 0)
       return path;
     if (picked == 1)
-      path = QFileInfo(path).absolutePath();
+      path = FileInfo(path).absolutePath();
     else
-      path = QDir(path).filePath(children[picked - 2]);
+      path = DirectoryPath(path).filePath(children[picked - 2]);
   }
   return {};
 }

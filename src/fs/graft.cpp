@@ -1,12 +1,6 @@
+#include "platform/platform.h"
 #include "fs/graft.h"
 #include "fs/mounts.h"
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QProcess>
-#include <QProcessEnvironment>
-#include <QStandardPaths>
-#include <QUuid>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -21,31 +15,31 @@ struct Descriptor {
     explicit Descriptor(int value) : fd(value) {}
     ~Descriptor() { if (fd >= 0) ::close(fd); }
 };
-int openDirectory(const QString &path)
+int openDirectory(const String &path)
 {
     int fd = ::open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    for (const auto &part : path.split('/', Qt::SkipEmptyParts)) {
+    for (const auto &part : path.split('/', TextOptions::SkipEmptyParts)) {
         if (fd < 0) break;
-        const int next = ::openat(fd, QFile::encodeName(part).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        const int next = ::openat(fd, File::encodeName(part).constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
         const int code = errno;::close(fd);fd = next;errno = code;
     }
     return fd;
 }
 bool matches(const struct stat &value, const FileMetadata &expected)
 {
-    return S_ISDIR(value.st_mode) && quint64(value.st_dev) == expected.device && quint64(value.st_ino) == expected.inode &&
+    return S_ISDIR(value.st_mode) && uint64(value.st_dev) == expected.device && uint64(value.st_ino) == expected.inode &&
         value.st_ctim.tv_sec == expected.changedSeconds && value.st_ctim.tv_nsec == expected.changedNanoseconds;
 }
-QString systemError() { return QString::fromLocal8Bit(std::strerror(errno)); }
+String systemError() { return String::fromLocal8Bit(std::strerror(errno)); }
 }
 GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destination,
-                        const Cancellation &cancel, const std::function<void(const QString &)> &progress)
+                        const Cancellation &cancel, const std::function<void(const String &)> &progress)
 {
     GraftResult result;result.source = source.path;
     if (cancel->load()) { result.cancelled = true;return result; }
     for (const auto &item : {source, destination}) {
-        if (!item.error.isEmpty() || !item.directory || item.symlink || !QDir::isAbsolutePath(item.path) ||
-            item.path.contains(QChar::Null) || QDir::cleanPath(item.path) != item.path) {
+        if (!item.error.isEmpty() || !item.directory || item.symlink || !DirectoryPath::isAbsolutePath(item.path) ||
+            item.path.contains(Char::Null) || DirectoryPath::cleanPath(item.path) != item.path) {
             result.error = "Graft requires real source and destination directories";return result;
         }
     }
@@ -55,9 +49,9 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
     for (const auto &mount : mountedLocations(nullptr, true)) if (isWithin(mount.path, source.path)) {
         result.error = "Branch contains a mount point; Graft was not started";return result;
     }
-    const auto parentPath = QFileInfo(source.path).absolutePath();
-    const auto name = QFile::encodeName(QFileInfo(source.path).fileName());
-    result.target = QDir(destination.path).filePath(QFileInfo(source.path).fileName());
+    const auto parentPath = FileInfo(source.path).absolutePath();
+    const auto name = File::encodeName(FileInfo(source.path).fileName());
+    result.target = DirectoryPath(destination.path).filePath(FileInfo(source.path).fileName());
     if (result.target == source.path) { result.error = "Branch is already in that directory";return result; }
     Descriptor parent(openDirectory(parentPath)), target(openDirectory(destination.path));
     struct stat original{}, targetDirectory{};
@@ -72,7 +66,7 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
     }
     if (cancel->load()) { result.cancelled = true;return result; }
     // Apartar el origen permite verificar el objeto trasladado y restaurarlo ante fallos.
-    const auto held = QFile::encodeName(".ltree-graft-" + QUuid::createUuid().toString(QUuid::WithoutBraces));
+    const auto held = File::encodeName(".ltree-graft-" + Uuid::createUuid().toString(Uuid::WithoutBraces));
     if (::syscall(SYS_renameat2, parent.fd, name.constData(), parent.fd, held.constData(), RENAME_NOREPLACE) != 0) {
         result.error = "Cannot prepare branch: " + systemError();return result;
     }
@@ -88,24 +82,24 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
         else if (cancel->load()) result.cancelled = true;
         else if (errno == EXDEV) {
             result.crossDevice = true;
-            const auto executable = QStandardPaths::findExecutable("mv");
+            const auto executable = Paths::findExecutable("mv");
             if (executable.isEmpty()) result.error = "GNU mv is required for Graft across filesystems";
             else {
                 // Los descriptores heredados fijan los padres; no se ejecuta un shell.
-                QProcess process;auto env = QProcessEnvironment::systemEnvironment();env.insert("LC_ALL", "C");
+                Process process;auto env = ProcessEnvironment::systemEnvironment();env.insert("LC_ALL", "C");
                 process.setProcessEnvironment(env);
                 const int sourceFd = parent.fd, targetFd = target.fd;
                 process.setChildProcessModifier([sourceFd, targetFd] {
                     ::fcntl(sourceFd, F_SETFD, 0);::fcntl(targetFd, F_SETFD, 0);
                 });
-                const auto from = QString("/proc/self/fd/%1/%2").arg(parent.fd).arg(QFile::decodeName(held));
-                const auto to = QString("/proc/self/fd/%1/%2").arg(target.fd).arg(QFile::decodeName(name));
+                const auto from = String("/proc/self/fd/%1/%2").arg(parent.fd).arg(File::decodeName(held));
+                const auto to = String("/proc/self/fd/%1/%2").arg(target.fd).arg(File::decodeName(name));
                 process.start(executable, {"--no-clobber", "--no-target-directory", "--", from, to});
                 if (!process.waitForStarted(5000)) result.error = "Cannot start GNU mv: " + process.errorString();
                 else {
-                    process.closeWriteChannel();QByteArray diagnostics;
+                    process.closeWriteChannel();Bytes diagnostics;
                     // Una operación entre volúmenes termina antes de devolver el control al modelo.
-                    while (process.state() != QProcess::NotRunning) {
+                    while (process.state() != Process::NotRunning) {
                         process.waitForFinished(50);
                         diagnostics += process.readAllStandardError();diagnostics = diagnostics.left(65536);process.readAllStandardOutput();
                         if (cancel->load()) {
@@ -119,8 +113,8 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
                     const bool arrived = ::fstatat(target.fd, name.constData(), &existing, AT_SYMLINK_NOFOLLOW) == 0 && S_ISDIR(existing.st_mode);
                     result.moved = !retained && arrived;
                     if (!result.moved) result.error = result.cancelled ? "Graft stopped; any destination copy is retained" :
-                        "Graft failed: " + (diagnostics.isEmpty() ? QString("Transfer did not complete; source and any destination copy are retained") : QString::fromLocal8Bit(diagnostics).trimmed());
-                    else if (!diagnostics.isEmpty()) result.error = QString::fromLocal8Bit(diagnostics).trimmed();
+                        "Graft failed: " + (diagnostics.isEmpty() ? String("Transfer did not complete; source and any destination copy are retained") : String::fromLocal8Bit(diagnostics).trimmed());
+                    else if (!diagnostics.isEmpty()) result.error = String::fromLocal8Bit(diagnostics).trimmed();
                     result.error.replace(from, source.path).replace(to, result.target);
                 }
             }
@@ -128,7 +122,7 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
     }
     if (!result.moved) {
         if (::syscall(SYS_renameat2, parent.fd, held.constData(), parent.fd, name.constData(), RENAME_NOREPLACE) != 0) {
-            result.recoverySource = QDir(parentPath).filePath(QFile::decodeName(held));
+            result.recoverySource = DirectoryPath(parentPath).filePath(File::decodeName(held));
             result.error += "; source retained at " + result.recoverySource;
         }
     } else {

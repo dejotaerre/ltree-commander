@@ -1,8 +1,21 @@
 # Changelog
 
+## License update — 2026-10-06
+
+- License the current original code, documentation and project-created assets under GNU GPL version 3 or later (`GPL-3.0-or-later`). Replace LICENSE with the complete GPLv3 text and update the README, alpha status and dependency notices.
+- Dependencies retain their own licenses. Revisions previously published under MIT retain their original licensing terms.
+
 ## 0.1.0-alpha.1 — 2026-10-03
 
 First functional alpha of LTree Commander for Linux.
+
+### Terminal-only build without Qt — 2026-10-06
+
+- `LTREE_BUILD_GUI=OFF` builds and runs without Qt, QTermWidget or the graphical font toolchain. Both interfaces remain enabled in the default build.
+- Shared file-operation algorithms now use a platform interface. The graphical build keeps its Qt implementation; terminal-only builds use C++/POSIX, ICU, PCRE2 and nlohmann JSON for Unicode, regex, processes, JSON histories and background work.
+- Terminal-only startup selects the TUI directly and allows independent sessions. All terminal commands remain available.
+- Build documentation separates graphical and terminal dependencies, with a Qt-free recipe using Debian 12's standard packages.
+- Graphical tests, terminal PTY suites and platform comparisons cover the two configurations. A clean Debian 12 build verifies that no Qt packages or libraries are required.
 
 ### Paired branch-size markers — 2026-10-04
 
@@ -154,7 +167,7 @@ This alpha implements a subset of the full compatibility roadmap. Recursive dire
 
 Symlinks and special files are rejected by copy/move/rename/permission operations; deletion of a link removes the link itself. Cross-filesystem movement preserves regular rwx and access/modification times, but does not preserve owners, ACLs, xattrs, special permission bits or hard-link relationships. Completed operations remain completed if a batch is cancelled. Empty source directories are retained by move. Abrupt interruption can leave .ltree-move-* or .ltree-rename-* items; there is no automatic recovery journal or undo. Concurrent external writers are not locked.
 
-Publication is pending the author's license choice and final source review.
+The initial alpha preparation preceded the public source release on 2026-10-04 and the GPL license update on 2026-10-06.
 
 ## Public source alpha — 2026-10-04
 

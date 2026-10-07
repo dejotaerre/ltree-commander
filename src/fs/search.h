@@ -1,36 +1,36 @@
 #pragma once
+#include "platform/platform.h"
 
 #include "fs/scanner.h"
-#include <QRegularExpression>
 #include <functional>
 
 namespace ltree {
 
 enum class SearchMode { Text, Hex, Unicode, Regex };
 struct SearchOptions {
-    QString query;
+    String query;
     SearchMode mode = SearchMode::Text;
     bool caseSensitive = false;
 };
 enum class SearchOutcome { Found, NotFound, Error, Cancelled };
 struct FileSearchResult {
     SearchOutcome outcome = SearchOutcome::NotFound;
-    QString error;
+    String error;
     int errorType = 0;
 };
 
 struct RegexSearchMatch {
-    qsizetype start = -1, length = 0;
-    QString error;
+    Index start = -1, length = 0;
+    String error;
 };
-inline constexpr qsizetype RegexLineLimit = 8 * 1024 * 1024;
-QString searchModeName(SearchMode mode);
+inline constexpr Index RegexLineLimit = 8 * 1024 * 1024;
+String searchModeName(SearchMode mode);
 SearchMode nextSearchMode(SearchMode mode);
-QRegularExpression searchExpression(const SearchOptions &options);
-RegexSearchMatch matchRegexLine(const QRegularExpression &expression, QStringView line,
-                               qsizetype from = 0, bool backward = false);
-QString validateSearch(const SearchOptions &options);
-FileSearchResult searchFile(const QString &path, const SearchOptions &options, const Cancellation &cancel,
-                            const std::function<void(qint64)> &progress = {});
+Regex searchExpression(const SearchOptions &options);
+RegexSearchMatch matchRegexLine(const Regex &expression, StringView line,
+                               Index from = 0, bool backward = false);
+String validateSearch(const SearchOptions &options);
+FileSearchResult searchFile(const String &path, const SearchOptions &options, const Cancellation &cancel,
+                            const std::function<void(int64)> &progress = {});
 
 }

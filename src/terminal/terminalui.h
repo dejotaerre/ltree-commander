@@ -1,5 +1,5 @@
 #pragma once
-#include <QString>
+#include "platform/platform.h"
 namespace ltree {
-int runTerminal(const QString &root, bool treeSizes);
+int runTerminal(const String &root, bool treeSizes);
 }

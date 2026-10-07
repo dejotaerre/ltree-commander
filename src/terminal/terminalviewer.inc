@@ -3,16 +3,16 @@ int viewerHorizontal_ = 0, viewerMode_ = 0, viewerCharset_ = 0, viewerTab_ = 6,
 bool viewerWrap_ = false, viewerRuler_ = false, viewerMask_ = false,
      viewerHitSkip_ = true, continuous_ = false, scrollLoop_ = false;
 int scrollSpeed_ = 0;
-qint64 scrollNext_ = 0, reloadNext_ = 0;
-QMap<int, qsizetype> bookmarks_;
-qsizetype hit_ = -1, hitLength_ = 0, gatherStart_ = -1;
-QString gather_, clipboard_;
+int64 scrollNext_ = 0, reloadNext_ = 0;
+Map<int, Index> bookmarks_;
+Index hit_ = -1, hitLength_ = 0, gatherStart_ = -1;
+String gather_, clipboard_;
 int viewerGap_ = 0, viewerTextPair_ = 2, viewerBackground_ = 0;
 SearchOptions viewerSearch_;
-QString viewerSearchError_;
-QVector<QString> viewerLines_;
-QVector<qsizetype> viewerOffsets_;
-ViewDocument decodeBytes(const QByteArray &bytes, int charset = 0) const {
+String viewerSearchError_;
+Vector<String> viewerLines_;
+Vector<Index> viewerOffsets_;
+ViewDocument decodeBytes(const Bytes &bytes, int charset = 0) const {
   ViewDocument doc;
   doc.bytes = bytes;
   if (charset == 1 || charset == 2 || charset == 6) {
@@ -21,41 +21,41 @@ ViewDocument decodeBytes(const QByteArray &bytes, int charset = 0) const {
                                           : "IBM037";
     iconv_t converter = iconv_open("UTF-8", encoding);
     if (converter != iconv_t(-1)) {
-      QByteArray output(bytes.size() * 4 + 16, '\0');
+      Bytes output(bytes.size() * 4 + 16, '\0');
       char *input = const_cast<char *>(bytes.constData()), *out = output.data();
       size_t left = bytes.size(), capacity = output.size();
       if (iconv(converter, &input, &left, &out, &capacity) != size_t(-1))
-        doc.text = QString::fromUtf8(output.constData(), out - output.data());
+        doc.text = String::fromUtf8(output.constData(), out - output.data());
       iconv_close(converter);
     }
-    doc.encoding = QString::fromLatin1(encoding);
+    doc.encoding = String::fromLatin1(encoding);
   } else {
-    auto encoding = charset == 3   ? QStringConverter::Utf8
-                    : charset == 4 ? QStringConverter::Utf16LE
+    auto encoding = charset == 3   ? TextEncoding::Utf8
+                    : charset == 4 ? TextEncoding::Utf16LE
                     : charset == 5
-                        ? QStringConverter::Utf16BE
-                        : QStringConverter::encodingForData(bytes).value_or(
-                              QStringConverter::Utf8);
-    QStringDecoder decoder(encoding);
+                        ? TextEncoding::Utf16BE
+                        : TextEncoding::encodingForData(bytes).value_or(
+                              TextEncoding::Utf8);
+    TextDecoder decoder(encoding);
     doc.text = decoder.decode(bytes);
     char16_t tail[8];
     const auto final = decoder.finalize(tail, 8);
     if (decoder.hasError() ||
-        final.error != QStringConverter::FinalizeResultError::NoError) {
-      doc.text = QString::fromLatin1(bytes);
+        final.error != TextEncoding::FinalizeResultError::NoError) {
+      doc.text = String::fromLatin1(bytes);
       doc.encoding = "Latin-1 (fallback)";
     } else
       doc.encoding =
-          QString::fromLatin1(QStringConverter::nameForEncoding(encoding));
+          String::fromLatin1(TextEncoding::nameForEncoding(encoding));
   }
   doc.text.replace("\r\n", "\n").replace('\r', '\n');
   doc.lines << 0;
-  for (qsizetype i = 0; i < doc.text.size(); ++i)
+  for (Index i = 0; i < doc.text.size(); ++i)
     if (doc.text[i] == '\n' && i + 1 < doc.text.size())
       doc.lines << i + 1;
   return doc;
 }
-void setMemoryDocument(const QByteArray &bytes, const QString &label) {
+void setMemoryDocument(const Bytes &bytes, const String &label) {
   if (bytes.size() > 32 * 1024 * 1024) {
     status_ = "Viewer limit: 32 MiB";
     return;
@@ -68,40 +68,40 @@ void setMemoryDocument(const QByteArray &bytes, const QString &label) {
   hex_ = terminalBinaryData(bytes);
   resetViewer();
 }
-std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
+std::pair<Index, Index> findInDocument(const ViewDocument &doc,
                                                const SearchOptions &options,
-                                               qsizetype from, bool backwards,
+                                               Index from, bool backwards,
                                                bool byteView = false) {
   viewerSearchError_.clear();
   if (byteView && options.mode != SearchMode::Hex) {
     ViewDocument raw = doc;
     bool latin = options.mode == SearchMode::Text;
     if (latin) {
-      raw.text = QString::fromLatin1(doc.bytes);
+      raw.text = String::fromLatin1(doc.bytes);
       raw.encoding = "Latin-1 (fallback)";
     } else {
       raw = decodeBytes(doc.bytes);
       const auto encoding =
-          QStringConverter::encodingForName(raw.encoding.toLatin1());
+          TextEncoding::encodingForName(raw.encoding.toLatin1());
       if (encoding)
-        raw.text = QStringDecoder(*encoding).decode(doc.bytes);
+        raw.text = TextDecoder(*encoding).decode(doc.bytes);
       else
-        raw.text = QString::fromLatin1(doc.bytes);
+        raw.text = String::fromLatin1(doc.bytes);
     }
     raw.lines = {0};
-    for (qsizetype i = 0; i < raw.text.size(); ++i)
+    for (Index i = 0; i < raw.text.size(); ++i)
       if (raw.text[i] == '\n')
         raw.lines << i + 1;
-    QVector<qsizetype> offsets;
-    qsizetype byte = 0;
-    if (!latin && doc.bytes.startsWith(QByteArray::fromHex("efbbbf")))
+    Vector<Index> offsets;
+    Index byte = 0;
+    if (!latin && doc.bytes.startsWith(Bytes::fromHex("efbbbf")))
       byte = 3;
-    else if (!latin && (doc.bytes.startsWith(QByteArray::fromHex("fffe")) ||
-                        doc.bytes.startsWith(QByteArray::fromHex("feff"))))
+    else if (!latin && (doc.bytes.startsWith(Bytes::fromHex("fffe")) ||
+                        doc.bytes.startsWith(Bytes::fromHex("feff"))))
       byte = 2;
     bool utf16 =
-        !latin && raw.encoding.startsWith("UTF-16", Qt::CaseInsensitive);
-    for (qsizetype i = 0; i < raw.text.size(); ++i) {
+        !latin && raw.encoding.startsWith("UTF-16", TextOptions::CaseInsensitive);
+    for (Index i = 0; i < raw.text.size(); ++i) {
       offsets << byte;
       if (latin || raw.encoding == "Latin-1 (fallback)")
         ++byte;
@@ -113,10 +113,10 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
         ++i;
         byte += 4;
       } else
-        byte += QString(raw.text[i]).toUtf8().size();
+        byte += String(raw.text[i]).toUtf8().size();
     }
     offsets << doc.bytes.size();
-    qsizetype index = std::lower_bound(offsets.cbegin(), offsets.cend(), from) -
+    Index index = std::lower_bound(offsets.cbegin(), offsets.cend(), from) -
                       offsets.cbegin();
     if (backwards && index > 0 && offsets.value(index) > from)
       --index;
@@ -130,9 +130,9 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
   if (options.query.isEmpty())
     return {-1, 0};
   if (options.mode == SearchMode::Hex) {
-    QByteArray hex = options.query.toLatin1();
+    Bytes hex = options.query.toLatin1();
     hex.replace(" ", "").replace("\t", "");
-    auto needle = QByteArray::fromHex(hex);
+    auto needle = Bytes::fromHex(hex);
     int index = backwards ? doc.bytes.lastIndexOf(needle, from)
                           : doc.bytes.indexOf(needle, from);
     return {index, needle.size()};
@@ -141,13 +141,13 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
     auto expression = searchExpression(options);
     if (backwards) {
       for (int l = int(doc.lines.size()) - 1; l >= 0; --l) {
-        qsizetype start = doc.lines[l], end = l + 1 < doc.lines.size()
+        Index start = doc.lines[l], end = l + 1 < doc.lines.size()
                                                   ? doc.lines[l + 1] - 1
                                                   : doc.text.size();
         if (start > from)
           continue;
         auto match = matchRegexLine(
-            expression, QStringView(doc.text).mid(start, end - start),
+            expression, StringView(doc.text).mid(start, end - start),
             std::min(from - start, end - start), true);
         if (!match.error.isEmpty()) {
           viewerSearchError_ = match.error;
@@ -158,14 +158,14 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
       }
     } else {
       for (int l = 0; l < doc.lines.size(); ++l) {
-        qsizetype start = doc.lines[l], end = l + 1 < doc.lines.size()
+        Index start = doc.lines[l], end = l + 1 < doc.lines.size()
                                                   ? doc.lines[l + 1] - 1
                                                   : doc.text.size();
         if (end < from)
           continue;
         auto match = matchRegexLine(
-            expression, QStringView(doc.text).mid(start, end - start),
-            std::max(qsizetype(0), from - start), false);
+            expression, StringView(doc.text).mid(start, end - start),
+            std::max(Index(0), from - start), false);
         if (!match.error.isEmpty()) {
           viewerSearchError_ = match.error;
           return {-1, 0};
@@ -176,37 +176,37 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
     }
     return {-1, 0};
   }
-  QString subject = doc.text, needle = options.query;
+  String subject = doc.text, needle = options.query;
   auto sensitivity =
-      options.caseSensitive ? Qt::CaseSensitive : Qt::CaseInsensitive;
+      options.caseSensitive ? TextOptions::CaseSensitive : TextOptions::CaseInsensitive;
   if (options.mode == SearchMode::Text) {
     if (doc.encoding == "Latin-1 (fallback)")
-      needle = QString::fromLatin1(options.query.toUtf8());
+      needle = String::fromLatin1(options.query.toUtf8());
     if (!options.caseSensitive) {
-      auto fold = [](QString &text) {
-        for (QChar &ch : text)
+      auto fold = [](String &text) {
+        for (Char &ch : text)
           if (ch >= 'A' && ch <= 'Z')
-            ch = QChar(ch.unicode() + 32);
+            ch = Char(ch.unicode() + 32);
       };
       fold(subject);
       fold(needle);
     }
-    sensitivity = Qt::CaseSensitive;
+    sensitivity = TextOptions::CaseSensitive;
   }
   if (!needle.startsWith('*') &&
       needle.mid(1, needle.size() - 2).contains('*')) {
-    QString pattern;
+    String pattern;
     for (int i = 0; i < needle.size(); ++i)
       pattern += needle[i] == '*' && i > 0 && i + 1 < needle.size()
                      ? "[^\\r\\n]*?"
-                     : QRegularExpression::escape(QString(needle[i]));
-    QRegularExpression expression(
+                     : Regex::escape(String(needle[i]));
+    Regex expression(
         "(*LIMIT_MATCH=1000000)(*LIMIT_DEPTH=1000)(*LIMIT_HEAP=8192)" + pattern,
-        sensitivity == Qt::CaseSensitive
-            ? QRegularExpression::NoPatternOption
-            : QRegularExpression::CaseInsensitiveOption);
-    std::pair<qsizetype, qsizetype> result{-1, 0};
-    for (qsizetype offset = backwards ? 0 : from;
+        sensitivity == TextOptions::CaseSensitive
+            ? Regex::NoPatternOption
+            : Regex::CaseInsensitiveOption);
+    std::pair<Index, Index> result{-1, 0};
+    for (Index offset = backwards ? 0 : from;
          offset >= 0 && offset <= subject.size();) {
       auto match = expression.match(subject, offset);
       if (!match.isValid()) {
@@ -222,7 +222,7 @@ std::pair<qsizetype, qsizetype> findInDocument(const ViewDocument &doc,
     }
     return result;
   }
-  qsizetype index = backwards ? subject.lastIndexOf(needle, from, sensitivity)
+  Index index = backwards ? subject.lastIndexOf(needle, from, sensitivity)
                               : subject.indexOf(needle, from, sensitivity);
   return {index, needle.size()};
 }
@@ -244,41 +244,41 @@ void rebuildViewerLines(int displayWidth = -1) {
   viewerOffsets_.clear();
   if (viewerMode_ == 2) {
     viewed_ = decodeBytes(viewed_.bytes, viewerCharset_);
-    QString clean;
+    String clean;
     for (unsigned char byte : viewed_.bytes)
       if (byte >= 32 && byte <= 126)
-        clean += QChar(byte);
+        clean += Char(byte);
     viewed_.text = clean;
     viewed_.lines = {0};
   }
   const int w = std::max(1, (displayWidth < 0 ? columns_ : displayWidth) - 7);
-  for (qsizetype l = 0; l < viewed_.lines.size(); ++l) {
-    qsizetype start = viewed_.lines[l], end = l + 1 < viewed_.lines.size()
+  for (Index l = 0; l < viewed_.lines.size(); ++l) {
+    Index start = viewed_.lines[l], end = l + 1 < viewed_.lines.size()
                                                   ? viewed_.lines[l + 1]
                                                   : viewed_.text.size();
-    QString line = viewed_.text.mid(start, end - start);
+    String line = viewed_.text.mid(start, end - start);
     line.remove('\n');
-    QString expanded;
+    String expanded;
     for (const auto ch : line) {
       if (ch == '\t')
-        expanded += QString(viewerTab_ - (expanded.size() % viewerTab_), ' ');
+        expanded += String(viewerTab_ - (expanded.size() % viewerTab_), ' ');
       else
         expanded += ch;
     }
     if (viewerMode_ == 2) {
-      QString clean;
+      String clean;
       for (const auto ch : expanded)
         if (ch.isPrint())
           clean += ch;
       expanded = clean;
     }
     if (viewerMask_ && viewerMode_ != 2) {
-      for (QChar &ch : expanded) {
+      for (Char &ch : expanded) {
         int code = ch.unicode();
         if (code < 32 || (code >= 128 && code < 160))
           ch = ' ';
         else if (code >= 160 && code <= 255)
-          ch = QChar(code & 127);
+          ch = Char(code & 127);
       }
     }
     if (viewerWrap_ && expanded.size() > w) {
@@ -292,16 +292,16 @@ void rebuildViewerLines(int displayWidth = -1) {
     }
   }
 }
-qsizetype viewerPosition() const {
+Index viewerPosition() const {
   if (hex_ || viewerMode_ == 1)
-    return qsizetype(viewerTop_) * bytesPerRow(columns_);
+    return Index(viewerTop_) * bytesPerRow(columns_);
   return viewerOffsets_.isEmpty()
              ? 0
              : viewerOffsets_[std::clamp(viewerTop_ +
                                              std::max(0, viewerHighlight_),
                                          0, int(viewerOffsets_.size()) - 1)];
 }
-void gotoViewer(qsizetype position) {
+void gotoViewer(Index position) {
   if (hex_ || viewerMode_ == 1)
     viewerTop_ = int(position / bytesPerRow(columns_));
   else {
@@ -320,14 +320,14 @@ void viewerFind(bool backwards, bool initial = false, bool pageOnly = false) {
       return;
     rememberedSearch_ = viewerSearch_;
   }
-  qsizetype from =
+  Index from =
       initial     ? backwards ? ((hex_ || viewerMode_ == 1 ||
                                   viewerSearch_.mode == SearchMode::Hex)
                                      ? viewed_.bytes.size()
                                      : viewed_.text.size()) -
                                     1
                               : 0
-      : hit_ >= 0 ? hit_ + (backwards ? -1 : std::max(qsizetype(1), hitLength_))
+      : hit_ >= 0 ? hit_ + (backwards ? -1 : std::max(Index(1), hitLength_))
                   : viewerPosition();
   if (from < 0) {
     status_ = "No previous match";
@@ -352,7 +352,7 @@ void viewerFind(bool backwards, bool initial = false, bool pageOnly = false) {
     return;
   }
   if (pageOnly) {
-    qsizetype end =
+    Index end =
         hex_ ? viewerPosition() + (rows_ - 5) * bytesPerRow(columns_)
              : viewerOffsets_.value(std::min(viewerTop_ + rows_ - 5,
                                              int(viewerOffsets_.size()) - 1),
@@ -367,7 +367,7 @@ void viewerFind(bool backwards, bool initial = false, bool pageOnly = false) {
   if (viewerSearch_.mode == SearchMode::Hex)
     hex_ = true;
   gotoViewer(hit_);
-  status_ = QString("Match at %1").arg(hit_);
+  status_ = String("Match at %1").arg(hit_);
 }
 void drawExtendedViewer() {
   text(0, 0, pathLabel(viewerPath_, columns_), 1, columns_);
@@ -376,13 +376,13 @@ void drawExtendedViewer() {
     drawDocument(0, 1, h, columns_, viewed_, true, viewerTop_);
     if (hit_ >= 0) {
       int bytes = bytesPerRow(columns_);
-      for (qsizetype at = hit_;
+      for (Index at = hit_;
            at < hit_ + hitLength_ && at < viewed_.bytes.size(); ++at) {
         int row = at / bytes - viewerTop_;
         if (row >= 0 && row < h)
           text(10 + (at % bytes) * 3, row + 1,
-               QString("%1")
-                   .arg(quint8(viewed_.bytes[at]), 2, 16, QChar('0'))
+               String("%1")
+                   .arg(uint8(viewed_.bytes[at]), 2, 16, Char('0'))
                    .toUpper(),
                3, 2);
       }
@@ -390,13 +390,13 @@ void drawExtendedViewer() {
   } else if (viewerMode_ == 1) {
     int bytes = bytesPerRow(columns_);
     for (int r = 0; r < h; ++r) {
-      qsizetype from = qsizetype(viewerTop_ + r) * bytes;
+      Index from = Index(viewerTop_ + r) * bytes;
       if (from >= viewed_.bytes.size())
         break;
-      QString line;
+      String line;
       for (unsigned char ch : viewed_.bytes.mid(from, bytes))
-        line += QString::number(ch).rightJustified(3) + " ";
-      text(0, r + 1, QString::number(from).rightJustified(8) + " " + line, 2,
+        line += String::number(ch).rightJustified(3) + " ";
+      text(0, r + 1, String::number(from).rightJustified(8) + " " + line, 2,
            columns_);
     }
   } else {
@@ -406,9 +406,9 @@ void drawExtendedViewer() {
         std::clamp(viewerTop_, 0, std::max(0, int(viewerLines_.size()) - 1));
     int startY = viewerRuler_ ? 2 : 1;
     if (viewerRuler_) {
-      QString ruler;
+      String ruler;
       for (int i = 0; i < columns_ - 7; ++i)
-        ruler += QChar('0' + ((viewerHorizontal_ + i + 1) % 10));
+        ruler += Char('0' + ((viewerHorizontal_ + i + 1) % 10));
       text(7, 1, ruler, 1, columns_ - 7);
     }
     for (int r = 0;
@@ -419,7 +419,7 @@ void drawExtendedViewer() {
       const int pair = viewerHighlight_ == r ? 3 : viewerTextPair_;
       if (pair == 3)
         fill(0, startY + r, columns_, 3);
-      text(0, startY + r, QString::number(index + 1).rightJustified(5), 1, 5);
+      text(0, startY + r, String::number(index + 1).rightJustified(5), 1, 5);
       text(7, startY + r, line.mid(viewerHorizontal_), pair, columns_ - 7);
       if (hit_ >= viewerOffsets_[index] &&
           hit_ < viewerOffsets_[index] + line.size() &&
@@ -458,7 +458,7 @@ void drawExtendedViewer() {
            "[F/B/S/F9] Find [Space/+/-] Next/Back [F3] Reload [F8] Skip [F10] "
            "Menus [N/P/U] File [X] Shell [Esc] Return");
   text(0, rows_ - 1,
-       QString("%1 %2  %3/%4  %5 bytes  Tab %6  %7  %8")
+       String("%1 %2  %3/%4  %5 bytes  Tab %6  %7  %8")
            .arg(hex_               ? "HEX"
                 : viewerMode_ == 1 ? "DUMP"
                 : viewerMode_ == 2 ? "JUNK"
@@ -478,12 +478,12 @@ void viewerOffset() {
   auto value = ask(
       "OFFSET / line: ", {}, {},
       [&] {
-        return QString("[F2] %1 [F4] Base %2 [F5] %3 [Enter] Jump [Esc] Cancel")
+        return String("[F2] %1 [F4] Base %2 [F5] %3 [Enter] Jump [Esc] Cancel")
             .arg(line ? "Line" : "Offset")
             .arg(base)
             .arg(relative ? "Relative" : "Absolute");
       },
-      [&](int k, QString &) {
+      [&](int k, String &) {
         if (k == KEY_F(2))
           line = !line;
         else if (k == KEY_F(4))
@@ -497,7 +497,7 @@ void viewerOffset() {
   if (!value)
     return;
   bool ok;
-  qsizetype at = value->toLongLong(&ok, base);
+  Index at = value->toLongLong(&ok, base);
   if (!ok) {
     status_ = "Invalid offset";
     return;
@@ -507,8 +507,8 @@ void viewerOffset() {
                             std::max(0, int(viewerLines_.size()) - 1));
   else
     gotoViewer(std::clamp(
-        at + (relative ? viewerPosition() : 0), qsizetype(0),
-        qsizetype(hex_ ? viewed_.bytes.size() : viewed_.text.size())));
+        at + (relative ? viewerPosition() : 0), Index(0),
+        Index(hex_ ? viewed_.bytes.size() : viewed_.text.size())));
 }
 void viewerGather() {
   if (gatherStart_ < 0) {
@@ -516,7 +516,7 @@ void viewerGather() {
     status_ = "Gather start marked; G again marks the end";
     return;
   }
-  qsizetype start = std::min(gatherStart_, viewerPosition()),
+  Index start = std::min(gatherStart_, viewerPosition()),
             end = std::max(gatherStart_, viewerPosition());
   if (!hex_) {
     int line =
@@ -527,7 +527,7 @@ void viewerGather() {
           1;
   }
   gatherStart_ = -1;
-  QByteArray selection =
+  Bytes selection =
       hex_ ? viewed_.bytes.mid(start, end - start + 1)
            : viewed_.text.mid(start, end - start + 1).toUtf8();
   int pick = choose("GATHER selection",
@@ -541,7 +541,7 @@ void viewerGather() {
     else {
       if (pick == 2)
         clipboard_.clear();
-      clipboard_ += QString::fromUtf8(selection);
+      clipboard_ += String::fromUtf8(selection);
     }
     publishClipboard();
     return;
@@ -550,12 +550,12 @@ void viewerGather() {
   if (!name)
     return;
   gather_ = *name;
-  QFile file(absolute(*name));
-  if (pick == 0 && QFileInfo::exists(file.fileName()) &&
+  File file(absolute(*name));
+  if (pick == 0 && FileInfo::exists(file.fileName()) &&
       !confirm("Replace " + file.fileName() + "?"))
     return;
-  if (!file.open(QIODevice::WriteOnly |
-                 (pick == 1 ? QIODevice::Append : QIODevice::Truncate))) {
+  if (!file.open(IO::WriteOnly |
+                 (pick == 1 ? IO::Append : IO::Truncate))) {
     status_ = file.errorString();
     return;
   }
@@ -564,11 +564,11 @@ void viewerGather() {
   else
     status_ = "Gather saved";
 }
-QString gatherSelection() const {
+String gatherSelection() const {
   if (hex_)
-    return QString::fromLatin1(viewed_.bytes.toHex(' '));
+    return String::fromLatin1(viewed_.bytes.toHex(' '));
   if (gatherStart_ >= 0) {
-    qsizetype first = std::min(gatherStart_, viewerPosition()),
+    Index first = std::min(gatherStart_, viewerPosition()),
               last = std::max(gatherStart_, viewerPosition());
     return viewed_.text.mid(first, last - first + 1);
   }
@@ -577,12 +577,12 @@ QString gatherSelection() const {
   return viewerLines_.value(at) + "\n";
 }
 void publishClipboard() {
-  QString program;
-  QStringList args;
-  if (!qEnvironmentVariable("WAYLAND_DISPLAY").isEmpty()) {
-    program = QStandardPaths::findExecutable("wl-copy");
-  } else if (!qEnvironmentVariable("DISPLAY").isEmpty()) {
-    program = QStandardPaths::findExecutable("xclip");
+  String program;
+  StringList args;
+  if (!environment("WAYLAND_DISPLAY").isEmpty()) {
+    program = Paths::findExecutable("wl-copy");
+  } else if (!environment("DISPLAY").isEmpty()) {
+    program = Paths::findExecutable("xclip");
     args = {"-selection", "clipboard"};
   }
   if (program.isEmpty()) {
@@ -590,7 +590,7 @@ void publishClipboard() {
               "(desktop clipboard requires wl-copy or xclip)";
     return;
   }
-  QProcess process;
+  Process process;
   process.start(program, args);
   if (!process.waitForStarted()) {
     status_ = process.errorString();
@@ -604,25 +604,25 @@ void publishClipboard() {
   }
   status_ = process.exitCode() == 0
                 ? "Clipboard updated"
-                : QString::fromUtf8(process.readAllStandardError());
+                : String::fromUtf8(process.readAllStandardError());
 }
 void viewerPrint() {
   auto dest = ask("PRINT to file (or | command): ");
   if (!dest)
     return;
-  QByteArray data;
+  Bytes data;
   if (hex_ || viewerMode_ == 1) {
-    for (qsizetype at = 0; at < viewed_.bytes.size(); at += 16) {
-      QString line = QString("%1  ").arg(at, 8, 16, QChar('0')).toUpper();
+    for (Index at = 0; at < viewed_.bytes.size(); at += 16) {
+      String line = String("%1  ").arg(at, 8, 16, Char('0')).toUpper();
       for (unsigned char byte : viewed_.bytes.mid(at, 16))
-        line += hex_ ? QString("%1 ").arg(byte, 2, 16, QChar('0')).toUpper()
-                     : QString::number(byte).rightJustified(3) + " ";
+        line += hex_ ? String("%1 ").arg(byte, 2, 16, Char('0')).toUpper()
+                     : String::number(byte).rightJustified(3) + " ";
       data += (line + "\n").toUtf8();
     }
   } else
     data = viewed_.text.toUtf8();
   if (dest->startsWith('|')) {
-    QProcess process;
+    Process process;
     process.start("/bin/sh", {"-c", dest->mid(1)});
     if (!process.waitForStarted()) {
       status_ = process.errorString();
@@ -631,7 +631,7 @@ void viewerPrint() {
     process.write(data);
     process.closeWriteChannel();
     while (!process.waitForFinished(100)) {
-      QCoreApplication::processEvents();
+      TerminalApplication::processEvents();
       if (stopped) {
         process.terminate();
         break;
@@ -639,13 +639,13 @@ void viewerPrint() {
     }
     status_ = process.exitCode() == 0
                   ? "Print completed"
-                  : QString::fromUtf8(process.readAllStandardError());
+                  : String::fromUtf8(process.readAllStandardError());
   } else {
-    QFile file(absolute(*dest));
-    if (QFileInfo::exists(file.fileName()) &&
+    File file(absolute(*dest));
+    if (FileInfo::exists(file.fileName()) &&
         !confirm("Replace " + file.fileName() + "?"))
       return;
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size())
+    if (!file.open(IO::WriteOnly) || file.write(data) != data.size())
       status_ = file.errorString();
     else
       status_ = "Print saved";
@@ -697,7 +697,7 @@ void sequenceFile(int direction, bool untag = false) {
 void viewerTick() {
   if (!viewer_ || editing_ || work_ != Work::None)
     return;
-  qint64 now = QDateTime::currentMSecsSinceEpoch();
+  int64 now = DateTime::currentMSecsSinceEpoch();
   if (scrollSpeed_ && now >= scrollNext_) {
     ++viewerTop_;
     int count = hex_ ? (viewed_.bytes.size() + bytesPerRow(columns_) - 1) /
@@ -781,7 +781,7 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
   }
   if (value == KEY_F(6) && !alt && !control) {
     viewerGap_ = (viewerGap_ + 1) % 4;
-    status_ = QString("Clipboard gap: %1").arg(viewerGap_);
+    status_ = String("Clipboard gap: %1").arg(viewerGap_);
     return;
   }
   if ((value == KEY_F(4) || letter == 'g') && !alt && !control) {
@@ -789,7 +789,7 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
     return;
   }
   if (value == KEY_F(5) && !alt && !control) {
-    clipboard_ += QString(viewerGap_, '\n') + gatherSelection();
+    clipboard_ += String(viewerGap_, '\n') + gatherSelection();
     publishClipboard();
     return;
   }
@@ -799,7 +799,7 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
     return;
   }
   if ((control && letter == 'a') || value == 0x2607) {
-    clipboard_ += QString(viewerGap_, '\n') + gatherSelection();
+    clipboard_ += String(viewerGap_, '\n') + gatherSelection();
     publishClipboard();
     return;
   }
@@ -814,7 +814,7 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
       if (active_.session.tags.contains(file.path))
         viewPaths_ << file.path;
     viewSequenceIndex_ = viewPaths_.indexOf(viewerPath_);
-    status_ = QString("View sequence: %1 tagged files").arg(viewPaths_.size());
+    status_ = String("View sequence: %1 tagged files").arg(viewPaths_.size());
     return;
   }
   if (control && value == KEY_F(3)) {
@@ -838,9 +838,9 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
   if (alt && (letter == 'v' || letter == 'e')) {
     const auto variable =
         letter == 'v' ? "LTREE_ALT_VIEWER" : "LTREE_ALT_EDITOR";
-    auto command = qEnvironmentVariable(variable);
+    auto command = environment(variable);
     if (command.isEmpty()) {
-      status_ = QString("Set %1 to a terminal program").arg(variable);
+      status_ = String("Set %1 to a terminal program").arg(variable);
       return;
     }
     shellCommand(command + " " + shellQuote(viewerPath_));
@@ -939,7 +939,7 @@ void extendedViewerKey(int value, bool alt, bool literal, bool directControl = f
     rebuildViewerLines();
     viewerTop_ = 0;
   } else if (value == 9) {
-    const QVector<int> tabs{2, 3, 4, 6, 8};
+    const Vector<int> tabs{2, 3, 4, 6, 8};
     viewerTab_ = tabs[(tabs.indexOf(viewerTab_) + 1) % tabs.size()];
     rebuildViewerLines();
   } else if (letter >= '0' && letter <= '9')

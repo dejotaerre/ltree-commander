@@ -1,54 +1,55 @@
+#include "platform/platform.h"
 #include "core/filespec.h"
 
 namespace ltree {
 namespace {
-QPair<QString, QString> split(QString text)
+Pair<String, String> split(String text)
 {
     int dot = int(text.lastIndexOf('.'));
     if (dot == text.size() - 1 && text.left(dot).lastIndexOf('.') > 0) {
         text.chop(1);
         dot = int(text.lastIndexOf('.'));
     }
-    return dot > 0 ? qMakePair(text.left(dot), text.mid(dot + 1)) : qMakePair(text, QString{});
+    return dot > 0 ? makePair(text.left(dot), text.mid(dot + 1)) : makePair(text, String{});
 }
 
-QString expression(const QString &part, QString &error)
+String expression(const String &part, String &error)
 {
-    QString result = "\\A";
+    String result = "\\A";
     int trailing = int(part.size());
     while (trailing > 0 && part[trailing - 1] == '?') --trailing;
-    if (!part.isEmpty() && trailing == 0) return result + QString(".{1,%1}\\z").arg(part.size());
+    if (!part.isEmpty() && trailing == 0) return result + String(".{1,%1}\\z").arg(part.size());
     for (int i = 0; i < part.size(); ++i) {
-        const QChar c = part[i];
+        const Char c = part[i];
         if (c == '*') result += ".*";
         else if (c == '?') result += i >= trailing ? ".?" : ".";
-        else if (c == QChar(0x25c4) || c == QChar(0x25c0)) {
-            QString group;
-            while (++i < part.size() && part[i] != QChar(0x25ba) && part[i] != QChar(0x25b6)) {
+        else if (c == Char(0x25c4) || c == Char(0x25c0)) {
+            String group;
+            while (++i < part.size() && part[i] != Char(0x25ba) && part[i] != Char(0x25b6)) {
                 if (part[i] == '-') group += '-';
-                else group += QRegularExpression::escape(QString(part[i]));
+                else group += Regex::escape(String(part[i]));
             }
             if (i == part.size() || group.isEmpty()) { error = "Incomplete or empty character group"; return {}; }
             result += '[' + group + ']';
-        } else result += QRegularExpression::escape(QString(c));
+        } else result += Regex::escape(String(c));
     }
     return result + "\\z";
 }
 }
 
-bool Filespec::set(const QString &input, QString *error)
+bool Filespec::set(const String &input, String *error)
 {
-    QString text = input.trimmed();
+    String text = input.trimmed();
     if (text.isEmpty()) text = "*.*";
-    QString body = text;
+    String body = text;
     bool quoted = false;
     for (int i = 0; i < body.size(); ++i) {
         if (body[i] == '"') quoted = !quoted;
         if (body[i] == ':' && !quoted) { body = body.mid(i + 1); break; }
     }
-    QVector<Rule> rules;
-    QVector<Comparison> dates, sizes;
-    QString failure, token;
+    Vector<Rule> rules;
+    Vector<Comparison> dates, sizes;
+    String failure, token;
     bool negative = false, started = false, literal = false;
     int position = 0;
     quoted = false;
@@ -56,12 +57,12 @@ bool Filespec::set(const QString &input, QString *error)
         if (!started) return;
         ++position;
         if (token.isEmpty()) { failure = "Missing pattern after exclusion"; return; }
-        if (!literal && (QString("<>=").contains(token[0]) || token.compare("TODAY", Qt::CaseInsensitive) == 0 || token.startsWith("TODAY-", Qt::CaseInsensitive))) {
+        if (!literal && (String("<>=").contains(token[0]) || token.compare("TODAY", TextOptions::CaseInsensitive) == 0 || token.startsWith("TODAY-", TextOptions::CaseInsensitive))) {
             Comparison rule;
             rule.position = position;
             int offset = 0;
-            while (offset < token.size() && QString("<>=").contains(token[offset])) ++offset;
-            const QString op = token.left(offset);
+            while (offset < token.size() && String("<>=").contains(token[offset])) ++offset;
+            const String op = token.left(offset);
             if (op == "<") rule.mask = 1;
             else if (op == "=" || op.isEmpty()) rule.mask = 2;
             else if (op == ">") rule.mask = 4;
@@ -70,25 +71,25 @@ bool Filespec::set(const QString &input, QString *error)
             else if (op == "<>") rule.mask = 5;
             else failure = "Invalid date/size operator";
             if (negative) rule.mask ^= 7;
-            const QString value = token.mid(offset);
-            const bool size = value.startsWith('s', Qt::CaseInsensitive);
+            const String value = token.mid(offset);
+            const bool size = value.startsWith('s', TextOptions::CaseInsensitive);
             if (size) {
                 bool ok = false;
                 rule.value = value.mid(1).toLongLong(&ok);
-                if (!ok || !QRegularExpression("\\A[0-9]+\\z").match(value.mid(1)).hasMatch())
+                if (!ok || !Regex("\\A[0-9]+\\z").match(value.mid(1)).hasMatch())
                     failure = "Invalid size: use whole bytes without separators";
-            } else if (value.startsWith("TODAY", Qt::CaseInsensitive)) {
-                const auto relative = QRegularExpression("\\ATODAY(?:-([0-9]+))?\\z", QRegularExpression::CaseInsensitiveOption).match(value);
+            } else if (value.startsWith("TODAY", TextOptions::CaseInsensitive)) {
+                const auto relative = Regex("\\ATODAY(?:-([0-9]+))?\\z", Regex::CaseInsensitiveOption).match(value);
                 bool ok = true;
                 rule.value = relative.captured(1).isEmpty() ? 0 : relative.captured(1).toLongLong(&ok);
                 rule.relative = true;
                 if (!relative.hasMatch() || !ok || rule.value > 3652058) failure = "Use TODAY or TODAY-days";
             } else {
-                const auto date = QRegularExpression("\\A([0-9]{1,2})([./-])([0-9]{1,2})\\2([0-9]{2}|[0-9]{4})\\z").match(value);
+                const auto date = Regex("\\A([0-9]{1,2})([./-])([0-9]{1,2})\\2([0-9]{2}|[0-9]{4})\\z").match(value);
                 int year = date.captured(4).toInt();
                 // Perfil inicial: formato del manual; el corte de siglo queda documentado.
                 if (date.captured(4).size() == 2) year += year < 30 ? 2000 : 1900;
-                const QDate parsed(year, date.captured(1).toInt(), date.captured(3).toInt());
+                const Date parsed(year, date.captured(1).toInt(), date.captured(3).toInt());
                 if (!date.hasMatch() || !parsed.isValid()) failure = "Invalid date: use MM-DD-YYYY or TODAY";
                 rule.value = parsed.toJulianDay();
             }
@@ -98,14 +99,14 @@ bool Filespec::set(const QString &input, QString *error)
         }
         if (token.contains("*?")) { failure = "The *? combination is invalid in Filespec"; return; }
         const auto parts = split(token);
-        const QString name = expression(parts.first, failure), ext = expression(parts.second, failure);
-        QRegularExpression a(name, QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
-        QRegularExpression b(ext, QRegularExpression::CaseInsensitiveOption | QRegularExpression::DotMatchesEverythingOption);
+        const String name = expression(parts.first, failure), ext = expression(parts.second, failure);
+        Regex a(name, Regex::CaseInsensitiveOption | Regex::DotMatchesEverythingOption);
+        Regex b(ext, Regex::CaseInsensitiveOption | Regex::DotMatchesEverythingOption);
         if (!a.isValid() || !b.isValid()) failure = "Invalid character range";
         rules.append({a, b, negative});
         token.clear(); negative = false; started = false; literal = false;
     };
-    for (QChar c : body) {
+    for (Char c : body) {
         if (c == '"') { quoted = !quoted; started = true; if (token.isEmpty()) literal = true; continue; }
         if (!quoted && (c.isSpace() || c == ',' || c == ';')) { append(); continue; }
         if (!quoted && !started && c == '-') { negative = true; started = true; continue; }
@@ -124,7 +125,7 @@ bool Filespec::set(const QString &input, QString *error)
     return true;
 }
 
-bool Filespec::matches(const QString &filename) const
+bool Filespec::matches(const String &filename) const
 {
     FileEntry file;
     file.name = filename;
@@ -137,13 +138,13 @@ bool Filespec::usesToday() const
     return false;
 }
 
-bool Filespec::compare(const QVector<Comparison> &rules, qint64 value, QDate today)
+bool Filespec::compare(const Vector<Comparison> &rules, int64 value, Date today)
 {
     const auto threshold = [today](const Comparison &rule) {
         return rule.relative ? today.addDays(-rule.value).toJulianDay() : rule.value;
     };
     const auto check = [value, &threshold](const Comparison &rule) {
-        const qint64 target = threshold(rule);
+        const int64 target = threshold(rule);
         return (rule.mask & (value < target ? 1 : value == target ? 2 : 4)) != 0;
     };
     bool hasPositive = false, included = false;
@@ -164,7 +165,7 @@ bool Filespec::compare(const QVector<Comparison> &rules, qint64 value, QDate tod
     return !hasPositive || included;
 }
 
-bool Filespec::matches(const FileEntry &file, QDate today) const
+bool Filespec::matches(const FileEntry &file, Date today) const
 {
     const auto parts = split(file.name);
     bool positive = false, included = false, excluded = false;

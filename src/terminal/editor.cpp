@@ -1,24 +1,18 @@
+#include "platform/platform.h"
 #include "terminal/editor.h"
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
-#include <QProcess>
-#include <QRegularExpression>
-#include <QStandardPaths>
-#include <QStringDecoder>
 
 namespace ltree {
-bool terminalBinaryData(const QByteArray &bytes)
+bool terminalBinaryData(const Bytes &bytes)
 {
     // Decodificar primero para no confundir los ceros de UTF-16/32 con datos binarios.
-    const auto encoding = QStringConverter::encodingForData(bytes).value_or(QStringConverter::Utf8);
-    QStringDecoder decoder(encoding);
-    QString decoded = decoder.decode(bytes);
+    const auto encoding = TextEncoding::encodingForData(bytes).value_or(TextEncoding::Utf8);
+    TextDecoder decoder(encoding);
+    String decoded = decoder.decode(bytes);
     if (decoder.hasError()) {
-        if (encoding != QStringConverter::Utf8) return true;
-        decoded = QString::fromLatin1(bytes);
+        if (encoding != TextEncoding::Utf8) return true;
+        decoded = String::fromLatin1(bytes);
     }
-    qsizetype controls = 0;
+    Index controls = 0;
     for (const auto ch : decoded) {
         const ushort c = ch.unicode();
         if (!c) return true;
@@ -26,21 +20,21 @@ bool terminalBinaryData(const QByteArray &bytes)
     }
     return controls * 100 > decoded.size();
 }
-QStringList terminalEditorCommand(QString *error)
+StringList terminalEditorCommand(String *error)
 {
     if (error) error->clear();
-    QString selected;
-    const QString settings = QDir::homePath() + "/.selected_editor";
-    QFile file(settings);
+    String selected;
+    const String settings = DirectoryPath::homePath() + "/.selected_editor";
+    File file(settings);
     if (file.exists()) {
-        if (!file.open(QIODevice::ReadOnly)) {
+        if (!file.open(IO::ReadOnly)) {
             if (error) *error = "Cannot read " + settings + ": " + file.errorString();
             return {};
         }
-        const QRegularExpression assignment("^\\s*(?:export\\s+)?SELECTED_EDITOR\\s*=\\s*(.*)$");
-        const QRegularExpression literal("^(?:'([^']*)'|\"([^\"]*)\"|([^\\s#'\"]+))\\s*(?:#.*)?$");
+        const Regex assignment("^\\s*(?:export\\s+)?SELECTED_EDITOR\\s*=\\s*(.*)$");
+        const Regex literal("^(?:'([^']*)'|\"([^\"]*)\"|([^\\s#'\"]+))\\s*(?:#.*)?$");
         while (!file.atEnd()) {
-            const auto match = assignment.match(QString::fromUtf8(file.readLine()).trimmed());
+            const auto match = assignment.match(String::fromUtf8(file.readLine()).trimmed());
             if (!match.hasMatch()) continue;
             // Leer una asignación literal sin ejecutar el archivo como un script.
             const auto value = literal.match(match.captured(1));
@@ -51,21 +45,21 @@ QStringList terminalEditorCommand(QString *error)
             selected = value.captured(1) + value.captured(2) + value.captured(3);
         }
     }
-    if (selected.trimmed().isEmpty()) selected = qEnvironmentVariable("VISUAL");
-    if (selected.trimmed().isEmpty()) selected = qEnvironmentVariable("EDITOR");
+    if (selected.trimmed().isEmpty()) selected = environment("VISUAL");
+    if (selected.trimmed().isEmpty()) selected = environment("EDITOR");
     if (selected.trimmed().isEmpty()) {
         for (const auto &name : {"sensible-editor", "editor", "nano", "vi", "vim"}) {
-            const QString executable = QStandardPaths::findExecutable(name);
+            const String executable = Paths::findExecutable(name);
             if (!executable.isEmpty()) return {executable};
         }
         if (error) *error = "No editor found. Set SELECTED_EDITOR in ~/.selected_editor or EDITOR.";
         return {};
     }
     // Un archivo ejecutable con espacios es una sola ruta, sin argumentos adicionales.
-    const QFileInfo path(selected);
-    QStringList command = path.isFile() && path.isExecutable() ? QStringList{selected} : QProcess::splitCommand(selected);
+    const FileInfo path(selected);
+    StringList command = path.isFile() && path.isExecutable() ? StringList{selected} : Process::splitCommand(selected);
     if (!command.isEmpty()) {
-        const QString executable = QStandardPaths::findExecutable(command.first());
+        const String executable = Paths::findExecutable(command.first());
         if (!executable.isEmpty()) { command[0] = executable;return command; }
     }
     if (error) *error = "Editor not found or not executable: " + selected;

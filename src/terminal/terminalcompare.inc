@@ -3,27 +3,27 @@ void compareDirectoryCommand(bool branch) {
   auto dest = ask("COMPARE with directory: ", destination());
   if (!dest)
     return;
-  QString target = absolute(*dest);
-  if (!QFileInfo(target).isDir() || QFileInfo(target).isSymLink()) {
+  String target = absolute(*dest);
+  if (!FileInfo(target).isDir() || FileInfo(target).isSymLink()) {
     status_ = "Enter an existing real directory";
     return;
   }
   DirectoryCompareOptions options;
   while (true) {
-    QStringList choices{
+    StringList choices{
         "Run comparison",
-        QString("Identical: %1")
-            .arg(QStringList{"off", "size", "date",
+        String("Identical: %1")
+            .arg(StringList{"off", "size", "date",
                              "size and date"}[options.identical]),
-        QString("Unique: %1").arg(options.unique ? "yes" : "no"),
-        QString("Newer: %1").arg(options.newer ? "yes" : "no"),
-        QString("Older: %1").arg(options.older ? "yes" : "no"),
-        QString("Size: %1")
-            .arg(QStringList{"off", "smaller", "larger",
+        String("Unique: %1").arg(options.unique ? "yes" : "no"),
+        String("Newer: %1").arg(options.newer ? "yes" : "no"),
+        String("Older: %1").arg(options.older ? "yes" : "no"),
+        String("Size: %1")
+            .arg(StringList{"off", "smaller", "larger",
                              "different"}[options.size]),
-        QString("Binary: %1")
-            .arg(QStringList{"off", "equal", "different"}[options.binary]),
-        QString("Case sensitive: %1").arg(options.caseSensitive ? "yes" : "no"),
+        String("Binary: %1")
+            .arg(StringList{"off", "equal", "different"}[options.binary]),
+        String("Case sensitive: %1").arg(options.caseSensitive ? "yes" : "no"),
         "Reset"};
     int pick = choose("COMPARE options", choices);
     if (pick < 0)
@@ -47,7 +47,7 @@ void compareDirectoryCommand(bool branch) {
     else
       options = {};
   }
-  QVector<FileEntry> files;
+  Vector<FileEntry> files;
   for (const auto &dir : s.directories())
     if ((branch ? isWithin(dir.path, s.directory) : dir.path == s.directory) &&
         dir.loaded) {
@@ -67,7 +67,7 @@ void compareDirectoryCommand(bool branch) {
   auto result = task("Comparing directories", [=](const Cancellation &cancel) {
     auto scanned = scanDirectories(target, branch, cancel);
     DirectoryCompareResult result;
-    QVector<FileEntry> targetFiles;
+    Vector<FileEntry> targetFiles;
     for (const auto &dir : scanned.directories) {
       if (!dir.error.isEmpty())
         result.errors << dir.path + ": " + dir.error;
@@ -91,7 +91,7 @@ void compareDirectoryCommand(bool branch) {
     }
     s.rebuild();
   }
-  status_ = QString("Compare: %1 matches; %2 errors")
+  status_ = String("Compare: %1 matches; %2 errors")
                 .arg(result.matches.size())
                 .arg(result.errors.size());
   if (!result.errors.isEmpty())
@@ -113,8 +113,8 @@ void filterCommand() {
     int option =
         choose("FILTER options",
                {"Run filter",
-                QString("Case sensitive: %1").arg(caseSensitive ? "yes" : "no"),
-                QString("Include empty: %1").arg(includeEmpty ? "yes" : "no")});
+                String("Case sensitive: %1").arg(caseSensitive ? "yes" : "no"),
+                String("Include empty: %1").arg(includeEmpty ? "yes" : "no")});
     if (option < 0)
       return;
     if (option == 0)
@@ -132,13 +132,13 @@ void filterCommand() {
   if (!result.cancelled)
     s.setCompareFilter(result.matches,
                        pick == 2 || pick == 3 ? SortKey::Size : SortKey::Name);
-  status_ = QString("Filter: %1 files; %2 errors")
+  status_ = String("Filter: %1 files; %2 errors")
                 .arg(result.matches.size())
                 .arg(result.errors.size());
 }
 CompareResult comparison_;
 CompareOptions compareOptions_;
-QString compareFirst_, compareSecond_;
+String compareFirst_, compareSecond_;
 int compareTop_ = 0;
 bool compareHex_ = false, compareSplit_ = true, compareLineNumbers_ = true,
      compareByteDetail_ = true;
@@ -275,7 +275,7 @@ void drawComparison() {
         int start = at * bytesPerRow(w);
         if (start >= std::max(bytes.size(), other.size()))
           continue;
-        text(x, y + r + 1, QString("%1 ").arg(start, 8, 16, QChar('0')), 1, 9);
+        text(x, y + r + 1, String("%1 ").arg(start, 8, 16, Char('0')), 1, 9);
         bool rowDiffers = bytes.mid(start, bytesPerRow(w)) !=
                           other.mid(start, bytesPerRow(w));
         for (int i = 0; i < bytesPerRow(w) &&
@@ -287,14 +287,14 @@ void drawComparison() {
                                    bytes[start + i] != other[start + i]
                              : rowDiffers;
           text(x + 10 + i * 3, y + r + 1,
-               present ? QString("%1 ")
-                             .arg(quint8(bytes[start + i]), 2, 16, QChar('0'))
+               present ? String("%1 ")
+                             .arg(uint8(bytes[start + i]), 2, 16, Char('0'))
                              .toUpper()
-                       : QString("-- "),
+                       : String("-- "),
                differs ? 14 : 2, 3);
           if (w >= 11 + bytesPerRow(w) * 4)
             text(x + 11 + bytesPerRow(w) * 3 + i, y + r + 1,
-                 present ? dosGlyph(quint8(bytes[start + i])) : QString("-"),
+                 present ? dosGlyph(uint8(bytes[start + i])) : String("-"),
                  differs ? 14 : 2, 1);
         }
       } else if (at < comparison_.rows.size()) {
@@ -304,8 +304,8 @@ void drawComparison() {
         if (index >= 0 && index < lines.size())
           text(x, y + r + 1,
                (compareLineNumbers_
-                    ? QString::number(index + 1).rightJustified(5) + " "
-                    : QString()) +
+                    ? String::number(index + 1).rightJustified(5) + " "
+                    : String()) +
                    lines[index],
                row.changed ? 14 : 2, w);
       }
@@ -317,7 +317,7 @@ void drawComparison() {
            "[W] Spaces [E] Empty [Esc] Return");
   text(
       0, rows_ - 2,
-      QString("%1 changes  %2 different bytes  Case: %3  Spaces: %4  Empty: %5")
+      String("%1 changes  %2 different bytes  Case: %3  Spaces: %4  Empty: %5")
           .arg(comparison_.changes.size())
           .arg(comparison_.differentBytes)
           .arg(compareOptions_.caseSensitive)

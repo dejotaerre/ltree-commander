@@ -1,14 +1,10 @@
+#include "platform/platform.h"
 #include "fs/filecompare.h"
 #include "fs/viewdocument.h"
-#include <QProcessEnvironment>
-#include <QFile>
-#include <QTemporaryDir>
-#include <QProcess>
-#include <QElapsedTimer>
 #include <algorithm>
 
 namespace ltree {
-CompareResult compareFiles(const QString &first, const QString &second, const Cancellation &cancel, const CompareOptions &options)
+CompareResult compareFiles(const String &first, const String &second, const Cancellation &cancel, const CompareOptions &options)
 {
     CompareResult result;
     const auto a = readViewDocument(first,cancel,false), b = readViewDocument(second,cancel,false);
@@ -19,26 +15,26 @@ CompareResult compareFiles(const QString &first, const QString &second, const Ca
     result.firstBytes=a.bytes; result.secondBytes=b.bytes;
     result.bytesEqual=a.bytes==b.bytes;
     const auto size=std::max(a.bytes.size(),b.bytes.size());
-    for(qsizetype offset=0;offset<size;offset+=4){
+    for(Index offset=0;offset<size;offset+=4){
         if((offset&4095)==0 && cancel->load()){result.cancelled=true;return result;}
         bool changed=false;
-        for(qsizetype i=offset;i<std::min(size,offset+4);++i){
+        for(Index i=offset;i<std::min(size,offset+4);++i){
             if(i>=a.bytes.size() || i>=b.bytes.size() || a.bytes[i]!=b.bytes[i]){changed=true;++result.differentBytes;}
         }
         if(changed)result.binaryBlocks.append(int(offset));
     }
-    const auto binary=[](const QString &text){
+    const auto binary=[](const String &text){
         for(const auto c:text)if(c.unicode()<32 && c!='\n' && c!='\r' && c!='\t')return true;
         return false;
     };
     result.rawCharacters=binary(a.text) || binary(b.text);
-    const auto lines=[](QString text) {
-        if (text.isEmpty()) return QStringList{};
+    const auto lines=[](String text) {
+        if (text.isEmpty()) return StringList{};
         if (text.endsWith('\n')) text.chop(1);
         return text.split('\n');
     };
-    const auto characters=[](const QByteArray &bytes){
-        QString value=QString::fromLatin1(bytes);
+    const auto characters=[](const Bytes &bytes){
+        String value=String::fromLatin1(bytes);
         value.replace("\r\n","\n");value.replace('\r','\n');return value;
     };
     result.first=lines(result.rawCharacters?characters(a.bytes):a.text);
@@ -56,13 +52,13 @@ CompareResult compareCharacters(const CompareResult &source, const CompareOption
     if (source.first.size()+source.second.size()>200000) {
         result.textError="Comparison limit: 200000 lines across both files"; return result;
     }
-    QStringList firstKeys,secondKeys;
-    const auto prepare=[&](const QStringList &lines,QStringList &shown,QStringList &keys,QVector<int> &numbers){
+    StringList firstKeys,secondKeys;
+    const auto prepare=[&](const StringList &lines,StringList &shown,StringList &keys,Vector<int> &numbers){
         for(int line=0;line<lines.size();++line){
             if((line&4095)==0 && cancel->load())return false;
             const auto &original=lines[line];
-            if(options.suppressEmpty && std::all_of(original.cbegin(),original.cend(),[](QChar c){return c==' ' || c=='\t';}))continue;
-            QString display=original;
+            if(options.suppressEmpty && std::all_of(original.cbegin(),original.cend(),[](Char c){return c==' ' || c=='\t';}))continue;
+            String display=original;
             if(options.compressWhitespace){
                 display.clear();bool space=false;
                 for(const auto c:original){
@@ -74,7 +70,7 @@ CompareResult compareCharacters(const CompareResult &source, const CompareOption
             if(!options.caseSensitive){
                 if(source.rawCharacters){
                     // Sin selector de página de códigos, el plegado binario se limita a ASCII.
-                    for(auto &c:key)if(c>='A' && c<='Z')c=QChar(c.unicode()+32);
+                    for(auto &c:key)if(c>='A' && c<='Z')c=Char(c.unicode()+32);
                 }else key=key.toCaseFolded();
             }
             shown.append(display);keys.append(key);numbers.append(line+1);
@@ -85,26 +81,26 @@ CompareResult compareCharacters(const CompareResult &source, const CompareOption
        !prepare(source.second,result.second,secondKeys,result.secondLineNumbers)){
         result.cancelled=true;return result;
     }
-    QTemporaryDir temporary;
+    TemporaryDirectory temporary;
     if (!temporary.isValid()) { result.textError="Cannot create the temporary comparison directory"; return result; }
-    const auto snapshot=[&](const QString &name,const QStringList &content) {
-        QFile file(temporary.filePath(name));
-        if (!file.open(QIODevice::WriteOnly)) return false;
-        const QByteArray bytes=content.isEmpty()?QByteArray{}:(content.join('\n')+'\n').toUtf8();
+    const auto snapshot=[&](const String &name,const StringList &content) {
+        File file(temporary.filePath(name));
+        if (!file.open(IO::WriteOnly)) return false;
+        const Bytes bytes=content.isEmpty()?Bytes{}:(content.join('\n')+'\n').toUtf8();
         return file.write(bytes)==bytes.size() && file.flush();
     };
     if (!snapshot("first",firstKeys) || !snapshot("second",secondKeys)) {
         result.textError="Cannot write the temporary copies"; return result;
     }
-    QProcess diff;
-    auto environment = QProcessEnvironment::systemEnvironment();
+    Process diff;
+    auto environment = ProcessEnvironment::systemEnvironment();
     environment.insert("LC_ALL", "C");
     diff.setProcessEnvironment(environment);
-    const QString format="%df %dn %dF %dN\n";
+    const String format="%df %dn %dF %dN\n";
     diff.start("/usr/bin/diff", {"--text","--old-group-format="+format,"--new-group-format="+format,
         "--changed-group-format="+format,"--unchanged-group-format=","--",temporary.filePath("first"),temporary.filePath("second")});
     if (!diff.waitForStarted(3000)) { result.textError="Cannot start /usr/bin/diff: "+diff.errorString(); return result; }
-    QElapsedTimer timer; timer.start();
+    ElapsedTimer timer; timer.start();
     while (!diff.waitForFinished(50)) {
         if (cancel->load() || timer.elapsed()>30000) {
             diff.kill(); diff.waitForFinished(); result.cancelled=cancel->load();
@@ -113,8 +109,8 @@ CompareResult compareCharacters(const CompareResult &source, const CompareOption
         }
     }
     if (cancel->load()) { result.cancelled=true; return result; }
-    if (diff.exitStatus()!=QProcess::NormalExit || diff.exitCode()>1) {
-        result.textError="diff error: "+QString::fromLocal8Bit(diff.readAllStandardError()); return result;
+    if (diff.exitStatus()!=Process::NormalExit || diff.exitCode()>1) {
+        result.textError="diff error: "+String::fromLocal8Bit(diff.readAllStandardError()); return result;
     }
     int left=0,right=0;
     const auto output=diff.readAllStandardOutput().split('\n');

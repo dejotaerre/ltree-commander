@@ -6,9 +6,9 @@ LTree Commander brings the tree-oriented, keyboard-driven workflow of **ZTreeWin
 
 The lineage matters: ZTree is itself an independently written recreation inspired by **XTree / XTreeGold for DOS**. ZEDTEK describes that history on its [official website](https://www.ztree.com/) and in its [FAQ](https://www.ztree.com/html/faq.htm). LTree Commander continues that workflow on Linux, adapting permissions, paths, symbolic links, mounted filesystems and desktop integration.
 
-This is an independent implementation, with no affiliation with or endorsement by ZEDTEK or the owners of XTree. Original ZTree/XTree code, binaries, manuals, logos and user configuration are not included. Product names belong to their respective owners; the MIT license applies to LTree Commander's original work.
+This is an independent implementation, with no affiliation with or endorsement by ZEDTEK or the owners of XTree. Original ZTree/XTree code, binaries, manuals, logos and user configuration are not included. Product names belong to their respective owners; the GNU GPL version 3 or later applies to LTree Commander's original work.
 
-**Version: 0.1.0-alpha.1 · executable: `ltc` · license: [MIT](LICENSE).** This is a working alpha, with substantial features still to implement before full compatibility. See [alpha status](docs/ALPHA.md).
+**Version: 0.1.0-alpha.1 · executable: `ltc` · license: [GPL-3.0-or-later](LICENSE).** This is a working alpha, with substantial features still to implement before full compatibility. See [alpha status](docs/ALPHA.md).
 
 ## Screenshots
 
@@ -59,46 +59,58 @@ The graphical and terminal interfaces share filesystem engines. Terminal command
 
 ## Build
 
-### Dependencies
+### Quick start: Arch Linux / CachyOS
 
-- C++20 compiler, **CMake 3.22+** and Ninja.
-- **Qt 6.11+**: Core, Widgets, Concurrent, Network and PrintSupport; Qt Test when building tests.
-- **QTermWidget 6** and **libarchive**.
-- Python 3 with **fontTools**, **kbd** console fonts and gzip.
-- **pkg-config** and **ncursesw** for the optional terminal backend.
-- GNU **diff** for text comparison; GNU **mv** for Graft across filesystems.
-- Optional: **Sublime Text** (`subl`) for text Open/Edit and **Kitty** for a separate shell.
+The **graphical build requires Qt 6.11 or newer**. Debian 12 and 13 ship older Qt versions, so their standard Qt development packages are insufficient for that interface. **A terminal-only build requires no Qt SDK or Qt runtime.** See the [build and installation guide](docs/BUILD.md) for all dependencies, other distributions, font setup, tests and troubleshooting.
 
-Install the dependencies using your distribution's package manager. Distribution packages with older Qt versions do not meet the current Qt 6.11 requirement.
+Install the build dependencies on an up-to-date Arch Linux / CachyOS system:
 
 ```bash
+sudo pacman -Syu --needed gcc cmake ninja git qt6-base qtermwidget \
+  libarchive python-fonttools kbd gzip pkgconf ncurses bash coreutils diffutils
+```
+
+Check Qt and the font tools, then build both graphical and terminal interfaces:
+
+```bash
+pkg-config --modversion Qt6Core
+python3 -c "import fontTools; print(fontTools.__version__)"
+test -r /usr/share/kbd/consolefonts/default8x16.psfu.gz
+
 git clone https://github.com/dejotaerre/ltree-commander.git
 cd ltree-commander
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build -j 4
-ctest --test-dir build --output-on-failure
+./build/ltc --version
 ./build/ltc "$HOME"
 ```
 
-The default font input is `/usr/share/kbd/consolefonts/default8x16.psfu.gz`. If your distribution stores its PSF2 8×16 font elsewhere, pass `-DLTREE_PSF_FONT=/absolute/path/to/font.psfu.gz`. The grid reads that installed bitmap and the integrated shell uses a locally generated TrueType version. Font data and generated fonts are not distributed in this source release. See [third-party notices](THIRD_PARTY.md).
-
-To omit the terminal backend, configure with `-DLTREE_BUILD_TERMINAL=OFF`. To omit tests, use `-DBUILD_TESTING=OFF`.
-
-### Run
+The executable is **`build/ltc`**. Try `./build/ltc --terminal "$HOME"` for the terminal interface. To install it for your user:
 
 ```bash
-./build/ltc /path/to/work
-./build/ltc --tree-sizes /path/to/work
-./build/ltc --fullscreen
-./build/ltc --terminal /path/to/work
-./build/ltc --new-instance /path/to/work
+install -Dm755 build/ltc "$HOME/.local/bin/ltc"
+export PATH="$HOME/.local/bin:$PATH"
+ltc --version
 ```
 
-With a graphical environment, `ltc` opens its own window. Without one, it selects terminal mode automatically. `--terminal` forces the terminal interface from a desktop session. A second graphical launch activates the existing graphical instance; `--new-instance` allows another window. Terminal launches always start an independent session, including over SSH, and do not activate or block graphical windows.
+The `export` applies to the current shell; keep `~/.local/bin` in your shell's `PATH` for later sessions. The [installation section](docs/BUILD.md#install-for-your-user) also covers the desktop launcher and icon.
 
-The graphical window saves its size and maximized/fullscreen state on normal exit. X11 can restore placement; Wayland leaves placement to the desktop. Settings and supported histories live under `~/.config/ltreec`, respecting `XDG_CONFIG_HOME`.
+### Terminal-only build: no Qt required
 
-The desktop launcher and icons are provided in [`resources`](resources). It expects `ltc` in `PATH` and the `ltreec` icon installed in the user's icon theme.
+On Debian 12 / Ubuntu:
+
+```bash
+sudo apt install build-essential cmake ninja-build pkg-config \
+  libarchive-dev libncurses-dev libicu-dev libpcre2-dev nlohmann-json3-dev
+cmake -S . -B build-terminal -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DLTREE_BUILD_GUI=OFF
+cmake --build build-terminal -j 4
+./build-terminal/ltc "$HOME"
+```
+
+This uses C++/POSIX, ICU for Unicode, PCRE2 for regular expressions, nlohmann JSON for histories, libarchive and ncursesw. It does not find, compile or link Qt or QTermWidget. The same file-operation engines and terminal commands are retained. See the [build guide](docs/BUILD.md#build-only-the-terminal-interface) for Arch packages and tests.
+
+Tests are disabled in the quick starts. Enable them with `-DBUILD_TESTING=ON`; terminal tests additionally need Python 3, `zip` and `7z`. Graphical tests also need Qt Test. To omit ncurses from a graphical build, use `-DLTREE_BUILD_TERMINAL=OFF`.
 
 ## First steps
 
@@ -124,6 +136,7 @@ Deletion can be permanent. Review the confirmations and try destructive operatio
 
 ## Documentation and development
 
+- [Build and installation guide](docs/BUILD.md) — dependencies, distribution differences, tests and desktop setup.
 - [Detailed usage guide](docs/USAGE.md) — Spanish, with command workflows and limitations.
 - [Alpha status](docs/ALPHA.md) — release scope and validation.
 - [Implementation notes](docs/IMPLEMENTACION.md) — Spanish, including incomplete features and design limits.
@@ -135,8 +148,10 @@ Contributions and bug reports are welcome through [GitHub issues](https://github
 
 ## License and acknowledgments
 
-Copyright © 2026 **Hector De Armas (dejotaerre)**. LTree Commander's original code, documentation and project-created assets are available under the **[MIT License](LICENSE)**.
+Copyright © 2026 **Hector De Armas (dejotaerre)**. LTree Commander's original code, documentation and project-created assets are available under the **[GNU General Public License, version 3 or later](LICENSE)** (`GPL-3.0-or-later`).
+
+You may redistribute and modify this work under version 3 of the GNU General Public License, or any later version published by the Free Software Foundation. It is distributed without any warranty, including implied warranties of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE) for the full terms.
 
 Credit for the reference workflow and interface goes to **ZTreeWin / ZTreeBold by ZEDTEK, Inc.**, and to the earlier **XTree / XTreeGold for DOS**. Visit [ZTree's official site](https://www.ztree.com/) for the original product.
 
-Dependencies retain their own licenses. In particular, QTermWidget is GPL-2.0-or-later: distributing a combined executable requires complying with its applicable GPL terms as well as the other dependency/font licenses. **This alpha release distributes project sources and screenshots, with no prebuilt binaries or font data.** MIT licensing of the original project sources does not relicense those dependencies.
+Dependencies retain their own licenses. In particular, QTermWidget is GPL-2.0-or-later: distributing a combined executable requires complying with its applicable GPL terms as well as the other dependency/font licenses. **This alpha release distributes project sources and screenshots, with no prebuilt binaries or font data.** The project license does not relicense those dependencies. Revisions previously published under MIT retain their original licensing terms.

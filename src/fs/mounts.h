@@ -1,9 +1,8 @@
 #pragma once
-#include <QString>
-#include <QVector>
+#include "platform/platform.h"
 
 namespace ltree {
-struct MountPoint { QString path, type, source; bool readOnly = false; };
-QVector<MountPoint> parseMountInfo(const QByteArray &data, bool includeSystem = false);
-QVector<MountPoint> mountedLocations(QString *error = nullptr, bool includeSystem = false);
+struct MountPoint { String path, type, source; bool readOnly = false; };
+Vector<MountPoint> parseMountInfo(const Bytes &data, bool includeSystem = false);
+Vector<MountPoint> mountedLocations(String *error = nullptr, bool includeSystem = false);
 }

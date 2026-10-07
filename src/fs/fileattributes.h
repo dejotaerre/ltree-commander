@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/platform.h"
 #include "fs/mounts.h"
 #include <optional>
 
@@ -6,9 +7,9 @@ namespace ltree {
 enum class AttributeStyle { Posix, Dos, Unknown };
 struct FileAttributes {
     AttributeStyle style = AttributeStyle::Posix;
-    std::optional<quint32> mode, dos;
+    std::optional<uint32> mode, dos;
 };
-QString filesystemTypeForPath(const QString &path, const QVector<MountPoint> &mounts);
-FileAttributes readFileAttributes(const QString &path, const QString &filesystemType);
-QString fileAttributeText(const FileAttributes &attributes, bool symlink, int width = 11);
+String filesystemTypeForPath(const String &path, const Vector<MountPoint> &mounts);
+FileAttributes readFileAttributes(const String &path, const String &filesystemType);
+String fileAttributeText(const FileAttributes &attributes, bool symlink, int width = 11);
 }
