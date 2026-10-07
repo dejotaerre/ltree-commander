@@ -9,6 +9,10 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Graphical fullscreen shortcut — 2026-10-07
+
+- Alt+Enter works with both Enter keys across graphical views, including archive browsing/creation and the embedded shell. Leaving fullscreen preserves the previous normal or maximized state; key autorepeat does not toggle it repeatedly.
+
 ### Selectable parent directory — 2026-10-06
 
 - Graphical and terminal trees show the actual parent path above the current root, with the current folder and its descendants indented as children. Selecting it expands the tree while retaining loaded descendants, tags and Filespec. The parent is read on opening/logging. `/` has no parent entry; Home retains its current-root shortcut.

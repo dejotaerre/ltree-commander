@@ -1,4 +1,8 @@
 #include "ui/windowgeometry.h"
+#include "ui/treewindow.h"
+#include "ui/archivewindow.h"
+#include "ui/comparewindow.h"
+#include "ui/executewindow.h"
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
@@ -43,6 +47,57 @@ private slots:
         QWidget restored; restored.setMinimumSize(640,400); restoreWindowGeometry(restored); restored.show(); QTRY_VERIFY(restored.isFullScreen());
         restored.showNormal(); QTRY_COMPARE(restored.size(),QSize(704,432)); saveWindowGeometry(restored);
         QWidget forced; forced.setMinimumSize(640,400); restoreWindowGeometry(forced); forced.showFullScreen(); QTRY_VERIFY(forced.isFullScreen());
+    }
+    void fullscreenTreeKeysPreserveGeometryAndPrompt() {
+        TreeWindow window(fixture_->path()); window.resize(704,432); window.move(31,43); window.show(); QVERIFY(QTest::qWaitForWindowExposed(&window)); QTRY_VERIFY(!window.busy());
+        const auto normal=window.geometry(); const auto position=window.pos(); const auto directory=window.session().directory;
+        QTest::keyClick(&window,Qt::Key_F);QTest::keyClicks(&window,"*.txt");
+        for(const bool maximized:{false,true}) {
+            if(maximized)window.showMaximized();
+            QTest::qWait(30);
+            for(const auto key:{Qt::Key_Return,Qt::Key_Enter}) {
+                QTest::keyClick(&window,key,Qt::AltModifier); QTRY_VERIFY(window.isFullScreen());
+                QTest::qWait(100);
+                QKeyEvent repeated(QEvent::KeyPress,key,Qt::AltModifier,{},true);
+                QApplication::sendEvent(&window,&repeated); QVERIFY(window.isFullScreen());
+                QTest::keyClick(&window,key,Qt::AltModifier); QTRY_VERIFY(!window.isFullScreen());
+                QTest::qWait(100);
+                QCOMPARE(window.isMaximized(),maximized);
+                QCOMPARE(window.session().directory,directory);
+                QCOMPARE(window.session().filespec.text(),QString("*.*"));
+            }
+            window.showNormal(); QTRY_COMPARE(window.size(),normal.size());
+            if(!QGuiApplication::platformName().startsWith("wayland"))QCOMPARE(window.pos(),position);
+        }
+        QTest::keyClick(&window,Qt::Key_Return);QCOMPARE(window.session().filespec.text(),QString("*.txt"));
+    }
+    void fullscreenKeysInChildViews_data() {
+        QTest::addColumn<QString>("view");
+        for(const auto name:{"viewer","archive","comparison","shell"})QTest::newRow(name)<<QString(name);
+    }
+    void fullscreenKeysInChildViews() {
+        QFETCH(QString,view);
+        const auto path=fixture_->path()+"/sample.txt";
+        {QFile file(path);QVERIFY(file.open(QIODevice::WriteOnly));file.write("sample\n");}
+        QWidget host;prepare(host);host.show();QTest::qWait(30);const auto normal=host.geometry();
+        std::unique_ptr<QWidget> child;
+        if(view=="viewer")child=std::make_unique<FileViewer>(path,&host);
+        else if(view=="archive")child=std::make_unique<ArchiveWindow>(QStringList{path},fixture_->path(),fixture_->path(),&host);
+        else if(view=="comparison")child=std::make_unique<CompareWindow>(path,path,&host);
+        else child=std::make_unique<ExecuteWindow>(fixture_->path(),"/bin/cat",QStringList{},&host);
+        child->resize(host.size());child->show();
+        QSignalSpy closed(child.get(),SIGNAL(closed()));
+        QWidget *target=view=="shell"?child->focusProxy():child.get();QVERIFY(target);
+        for(const bool maximized:{false,true}) {
+            if(maximized)host.showMaximized();
+            for(const auto key:{Qt::Key_Return,Qt::Key_Enter}) {
+                QTest::keyClick(target,key,Qt::AltModifier);QTRY_VERIFY(host.isFullScreen());
+                QTest::keyClick(target,key,Qt::AltModifier);QTRY_VERIFY(!host.isFullScreen());
+                QCOMPARE(host.isMaximized(),maximized);QCOMPARE(closed.count(),0);
+            }
+            host.showNormal();QTRY_COMPARE(host.size(),normal.size());
+        }
+        QVERIFY(!QFileInfo::exists(fixture_->path()+"/sample.zip"));
     }
     void minimizedDoesNotReopenMinimized() {
         QWidget original; prepare(original); original.show(); QTest::qWait(30); original.showMinimized(); QTRY_VERIFY(original.isMinimized()); saveWindowGeometry(original);

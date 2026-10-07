@@ -1,3 +1,4 @@
+#include "ui/windowgeometry.h"
 #include "ui/theme.h"
 #include "ui/treewindow.h"
 
@@ -1270,9 +1271,8 @@ void TreeWindow::keyPressEvent(QKeyEvent *event)
         if (key != Qt::Key_Shift) activeSpell_ = false;
         update(); return;
     }
-    if (key == Qt::Key_Return && modifiers_.testFlag(Qt::AltModifier)) {
+    if (handleFullscreenKey(*this, *event)) {
         menuMode_=0;
-        if (isFullScreen()) showNormal(); else showFullScreen();
         refresh(); return;
     }
     if (key == Qt::Key_F7 && modifiers_.testFlag(Qt::AltModifier)) {
@@ -1385,7 +1385,7 @@ void TreeWindow::keyPressEvent(QKeyEvent *event)
     const bool ctrl = physicalCtrl || (!physicalAlt && menuCtrl);
     const bool alt = physicalAlt || (!physicalCtrl && menuAlt);
     if(menuAlt && !physicalCtrl && !physicalAlt && (enter || key==Qt::Key_F7)){
-        if(enter){if(isFullScreen())showNormal();else showFullScreen();}
+        if(enter){toggleWindowFullscreen(*this);}
         else {if(isMaximized())showNormal();else showMaximized();}
         refresh();return;
     }

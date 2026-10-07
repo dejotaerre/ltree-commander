@@ -1,3 +1,4 @@
+#include "ui/windowgeometry.h"
 #include "ui/comparewindow.h"
 #include "ui/theme.h"
 #include "ui/doschars.h"
@@ -174,9 +175,7 @@ void CompareWindow::jump(int direction)
 void CompareWindow::keyPressEvent(QKeyEvent *event)
 {
     const int key=event->key();
-    if(event->modifiers().testFlag(Qt::AltModifier) && key==Qt::Key_Return){
-        if(window()->isFullScreen())window()->showNormal();else window()->showFullScreen();return;
-    }
+    if(handleFullscreenKey(*window(), *event))return;
     if(event->modifiers().testFlag(Qt::AltModifier) && key==Qt::Key_F7){
         if(window()->isMaximized())window()->showNormal();else window()->showMaximized();return;
     }

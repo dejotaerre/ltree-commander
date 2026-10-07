@@ -1,3 +1,4 @@
+#include "ui/windowgeometry.h"
 #include "ui/executewindow.h"
 #include "ui/theme.h"
 #include <algorithm>
@@ -49,9 +50,7 @@ bool ExecuteWindow::eventFilter(QObject *,QEvent *event)
        terminal_->getShellPID()>0 && terminal_->getForegroundProcessId()==terminal_->getShellPID()){
         finish();return true;
     }
-    if(key->modifiers().testFlag(Qt::AltModifier) && key->key()==Qt::Key_Return){
-        if(window()->isFullScreen())window()->showNormal();else window()->showFullScreen();return true;
-    }
+    if(handleFullscreenKey(*window(), *key))return true;
     if(key->modifiers().testFlag(Qt::AltModifier) && key->key()==Qt::Key_F7){
         if(window()->isMaximized())window()->showNormal();else window()->showMaximized();return true;
     }

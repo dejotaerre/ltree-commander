@@ -1,3 +1,4 @@
+#include "ui/windowgeometry.h"
 #include "ui/archivewindow.h"
 #include <QWheelEvent>
 #include "ui/theme.h"
@@ -208,6 +209,7 @@ void ArchiveWindow::promptKey(QKeyEvent *event)
 void ArchiveWindow::keyPressEvent(QKeyEvent *event)
 {
     const int key=event->key();modifiers_=event->modifiers();
+    if(handleFullscreenKey(*window(), *event)){menu_=0;return;}
     if(formatPicker_){
         if(key==Qt::Key_Escape)formatPicker_=false;
         else if(key==Qt::Key_Up)formatCursor_=(formatCursor_+8)%9;

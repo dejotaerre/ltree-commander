@@ -15,6 +15,8 @@ Tree/Branch/Showall/Global navigation, logging and tags; Filespec and persistent
 
 File attributes adapt to each mounted filesystem in both graphical and terminal lists: POSIX permissions (`rw-r--r--`, or `0644` in compact columns), and actual DOS `HRSA` flags on FAT/exFAT/NTFS. Symbolic links have a separate `l` indicator; unreadable DOS attributes appear as `????`.
 
+Alt+Enter toggles fullscreen throughout the graphical interface, including archives, the viewer, comparison and the embedded shell. Both the main and numeric keypad Enter keys work. Leaving fullscreen restores the previous normal or maximized state.
+
 The graphical window also remembers its normal size and maximized/fullscreen state. X11 placement can be restored; Wayland leaves placement to the compositor. Settings remain in ~/.config/ltreec, respecting XDG_CONFIG_HOME.
 
 ## Known limits

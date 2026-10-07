@@ -413,7 +413,7 @@ By default, launching again activates the existing graphical instance. Without a
 = DESKTOP KEYS
 GNOME may reserve some Alt function keys. LTree keeps those desktop functions intact. Archives use Enter. Where offered, F4 in lists and F10 in the viewer show alternate command menus without holding a modifier.
 
-: Alt+Enter | Toggle fullscreen in the graphical interface.
+: Alt+Enter | Toggle fullscreen in any graphical view, including archives and the shell. Both Enter keys work; leaving fullscreen restores the previous normal or maximized state.
 : Alt+F7 | Maximize / restore where delivered by the desktop.
 : Q | Quit after confirmation.
 

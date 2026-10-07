@@ -1,5 +1,6 @@
 #include "ui/windowgeometry.h"
 #include <QGuiApplication>
+#include <QKeyEvent>
 #include <QScreen>
 #include <QSettings>
 #include <QStandardPaths>
@@ -15,6 +16,19 @@ bool wayland()
 {
     return QGuiApplication::platformName().startsWith("wayland");
 }
+}
+
+void toggleWindowFullscreen(QWidget &window)
+{
+    window.setWindowState(window.windowState() ^ Qt::WindowFullScreen);
+}
+
+bool handleFullscreenKey(QWidget &window, const QKeyEvent &event)
+{
+    if (!event.modifiers().testFlag(Qt::AltModifier) ||
+        (event.key() != Qt::Key_Return && event.key() != Qt::Key_Enter)) return false;
+    if (!event.isAutoRepeat()) toggleWindowFullscreen(window);
+    return true;
 }
 
 void restoreWindowGeometry(QWidget &window)

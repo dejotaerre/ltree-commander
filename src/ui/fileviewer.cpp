@@ -1,3 +1,4 @@
+#include "ui/windowgeometry.h"
 #include "ui/theme.h"
 #include "ui/fileviewer.h"
 #include "ui/doschars.h"
@@ -318,7 +319,7 @@ void FileViewer::find(bool next,bool acrossFiles)
 void FileViewer::keyPressEvent(QKeyEvent *event)
 {
     const int key=event->key(); const auto mods=event->modifiers();
-    if (key==Qt::Key_Return && mods.testFlag(Qt::AltModifier)) { if(window()->isFullScreen())window()->showNormal();else window()->showFullScreen();return; }
+    if (handleFullscreenKey(*window(), *event)) { menuMode_=0; return; }
     if (loading_) { if(key==Qt::Key_Escape){cancel_->store(true);emit closed();} return; }
     status_.clear();
     if(!prompting() && key==Qt::Key_F10 && !mods.testFlag(Qt::ControlModifier) && !mods.testFlag(Qt::AltModifier)){menuMode_=(menuMode_+1)%3;update();return;}
