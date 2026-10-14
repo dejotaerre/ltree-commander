@@ -10,6 +10,13 @@ This is an independent implementation, with no affiliation with or endorsement b
 
 **Version: 0.1.0-alpha.1 · executable: `ltc` · license: [GPL-3.0-or-later](LICENSE).** This is a working alpha, with substantial features still to implement before full compatibility. See [alpha status](docs/ALPHA.md).
 
+## Development and contributors
+
+LTree Commander is developed through collaboration between **[Hector De Armas (dejotaerre)](https://github.com/dejotaerre)** and **[OpenAI Codex](https://developers.openai.com/codex/)**, an AI coding assistant.
+
+- **Hector De Armas:** project direction, knowledge of the ZTree workflow, feature requirements, usability feedback and hands-on testing.
+- **OpenAI Codex (AI contribution):** substantial contributions to implementation, debugging, automated tests, documentation and Linux packaging.
+
 ## Screenshots
 
 All screenshots show LTree Commander itself with synthetic example files.
