@@ -12,10 +12,10 @@ RenameResult renameItem(const FileMetadata &expected,const String &name,const Ca
 {
     RenameResult result;result.source=expected.path;
     if(cancel->load()){result.cancelled=true;return result;}
-    if(!expected.error.isEmpty() || expected.symlink || (!expected.regular && !expected.directory) ||
+    if(!expected.error.isEmpty() || (!expected.regular && !expected.directory && !expected.symlink) ||
        !DirectoryPath::isAbsolutePath(expected.path) || DirectoryPath::cleanPath(expected.path)!=expected.path || expected.path=="/" ||
        name.isEmpty() || name=="." || name==".." || name.contains('/') || name.contains(Char::Null)){
-        result.error="Rename requires a regular file or directory and a single valid name";return result;
+        result.error="Rename requires a regular file, directory or symbolic link and a single valid name";return result;
     }
     const auto parent=FileInfo(expected.path).absolutePath();result.target=DirectoryPath(parent).filePath(name);
     if(result.target==expected.path){result.error="Name is unchanged";return result;}
@@ -33,7 +33,7 @@ RenameResult renameItem(const FileMetadata &expected,const String &name,const Ca
     if(::fstatat(dir.fd,original.constData(),&before,AT_SYMLINK_NOFOLLOW)<0){result.error=String::fromLocal8Bit(std::strerror(errno));return result;}
     if(uint64(before.st_dev)!=expected.device || uint64(before.st_ino)!=expected.inode ||
        before.st_ctim.tv_sec!=expected.changedSeconds || before.st_ctim.tv_nsec!=expected.changedNanoseconds ||
-       expected.directory!=bool(S_ISDIR(before.st_mode)) || expected.regular!=bool(S_ISREG(before.st_mode))){
+       expected.directory!=bool(S_ISDIR(before.st_mode)) || expected.regular!=bool(S_ISREG(before.st_mode)) || expected.symlink!=bool(S_ISLNK(before.st_mode))){
         result.error="Selected item changed since review; reopen Rename";return result;
     }
     if(cancel->load()){result.cancelled=true;return result;}

@@ -85,7 +85,7 @@ cmake --build build -j 4
 ./build/ltc "$HOME"
 ```
 
-The executable is **`build/ltc`**. Try `./build/ltc --terminal "$HOME"` for the terminal interface. To install it for your user:
+The executable is **`build/ltc`**. Running `ltc` without a directory selects your shell's current working directory inside the filesystem tree in both graphical and terminal modes. Its ancestors and neighboring folders are visible for arrow-key navigation; other branches can be expanded as needed. Use `ltc /path/to/folder` to select an explicit navigation root, or `ltc --terminal` to use the terminal interface. To install it for your user:
 
 ```bash
 install -Dm755 build/ltc "$HOME/.local/bin/ltc"

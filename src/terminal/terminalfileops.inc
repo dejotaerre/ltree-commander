@@ -56,7 +56,9 @@ void transfer(bool move, bool tagged, bool paths) {
   const bool each = tagged && confirm("Confirm copy/move for each file?");
   int done = 0, failed = 0, skipped = 0;
   Set<String> dirs;
+  int index=0;
   for (const auto &entry : plan.entries) {
+    ++index;
     if (stopped)
       break;
     if (each && !confirm((move ? "Move " : "Copy ") + entry.source + "?")) {
@@ -65,11 +67,24 @@ void transfer(bool move, bool tagged, bool paths) {
     }
     auto policy = replace;
     for (;;) {
+      const auto progress=std::make_shared<TransferProgress>();
+      ElapsedTimer elapsed;elapsed.start();
       auto result = task(
           (move ? "Moving " : "Copying ") + entry.source,
           [=, root = operationRoot(entry.source)](const Cancellation &cancel) {
-            return move ? moveFile(root, entry, policy, cancel)
-                        : copyFile(root, entry, policy, cancel);
+            const auto report=[progress](int64 bytes,int64 total,TransferPhase phase){progress->report(bytes,total,phase);};
+            return move ? moveFile(root, entry, policy, cancel, report)
+                        : copyFile(root, entry, policy, cancel, report);
+          },[&]{
+            for(int y=rows_-3;y<rows_;++y)fill(0,y,columns_,1);
+            const String label=String("%1 %2/%3: ").arg(move?"MOVE":"COPY").arg(index).arg(plan.entries.size());
+            text(0,rows_-3,label+pathLabel(entry.source,std::max(1,columns_-int(label.size()))),1);
+            text(0,rows_-2,"To: "+pathLabel(entry.target,std::max(1,columns_-4)),2);
+            const int barWidth=std::clamp(columns_/8,4,24);
+            text(0,rows_-1,String("|/-\\").mid(spinner_++%4,1),1,1);
+            text(2,rows_-1,String(barWidth*transferPercent(*progress)/100,Char(0x2588)).leftJustified(barWidth),1,barWidth);
+            text(barWidth+3,rows_-1,transferMetrics(*progress,elapsed.elapsed(),columns_<120),1,columns_-barWidth-15);
+            commands(columns_-12,rows_-1,cancel_->load()?"Stopping...":"[Esc] Cancel");
           });
       if (result.exists && policy == CopyReplace::Ask) {
         if (confirm("Replace " + entry.target + "?")) {
@@ -126,7 +141,8 @@ void removeItems(bool tagged) {
     status_ = "No files selected";
     return;
   }
-  if (!confirm(tree ? "Delete empty directory " + branch + "?"
+  const bool link=tree && FileInfo(branch).isSymLink();
+  if (!confirm(link ? "Delete symbolic link only (target kept): " + branch + "?" : tree ? "Delete empty directory " + branch + "?"
                     : String("Delete %1 file(s)?").arg(files.size())))
     return;
   const bool each = tagged && confirm("Confirm delete for each file?");
@@ -142,7 +158,7 @@ void removeItems(bool tagged) {
       if (other_)
         other_->session.removeDirectory(branch);
       applyScan(result.scan);
-      status_ = "Directory deleted";
+      status_ = result.symlink ? "Symbolic link deleted; target kept" : "Directory deleted";
     } else
       status_ = result.error;
     return;
@@ -233,14 +249,15 @@ void renameCommand(bool tagged) {
     return;
   }
   CopyCase letterCase = CopyCase::Keep;
+  const bool link=!tagged && readMetadata(tree?s.directory:files.first().path).symlink;
   auto name = ask(
-      "RENAME as: ",
+      link?"RENAME link as: ":"RENAME as: ",
       tree     ? FileInfo(s.directory).fileName()
       : tagged ? "*.*"
                : files.first().name,
       {},
       [&] {
-        return String("[Enter] OK [Tab] Case (%1) [Esc] Cancel")
+        return String("[Enter] OK [Tab] Case (%1) [Ctrl+C/Insert] Copy name [Esc] Cancel")
             .arg(StringList{"Keep", "Lower", "Upper"}[int(letterCase)]);
       },
       [&](int k, String &) {
@@ -248,7 +265,7 @@ void renameCommand(bool tagged) {
           return false;
         letterCase = CopyCase((int(letterCase) + 1) % 3);
         return true;
-      });
+      }, true);
   if (!name)
     return;
   StringList paths;
@@ -257,7 +274,7 @@ void renameCommand(bool tagged) {
   else
     for (const auto &file : files)
       paths << file.path;
-  if (!confirm(String("Rename %1 item(s)?").arg(paths.size())))
+  if (!confirm(link?String("Rename symbolic link only (target kept)?"):String("Rename %1 item(s)?").arg(paths.size())))
     return;
   const bool each = tagged && confirm("Confirm rename for each file?");
   int done = 0, failed = 0;
@@ -358,6 +375,7 @@ void linkCommand() {
 }
 void graftCommand() {
   auto source = readMetadata(active_.session.directory);
+  if(source.symlink){status_="Graft does not move a symbolic link's target; select the real directory to move it";return;}
   auto dest = ask("GRAFT branch to: ", destination(), "graft");
   if (!dest)
     return;
@@ -381,6 +399,7 @@ void pruneCommand() {
   PruneOptions options;
   auto root = active_.session.root;
   auto source = readMetadata(active_.session.directory);
+  if(source.symlink){status_="Prune does not follow symbolic links; select the real directory to prune it";return;}
   Map<String, FileMetadata> logged;
   for (auto it = active_.session.directories().cbegin();
        it != active_.session.directories().cend(); ++it)

@@ -9,6 +9,7 @@ struct DeleteResult {
     bool deleted = false;
     bool cancelled = false;
     bool directory = true;
+    bool symlink = false;
     ScanResult scan;
     StringList removedDirectories;
 };

@@ -3,6 +3,8 @@
 #include "fs/copyfiles.h"
 #include "fs/hexedit.h"
 #include "fs/metadata.h"
+#include "fs/deletedirectory.h"
+#include "fs/rename.h"
 #include "fs/search.h"
 #include "fs/stamp.h"
 #include "fs/viewdocument.h"
@@ -10,6 +12,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <fcntl.h>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <sys/stat.h>
@@ -160,8 +163,37 @@ void operations(const String &root) {
     const auto source = root + "/branch/a.txt", other = root + "/branch/sub/b.txt";
     write(source, "ORDER_123\nsecond\nORDER_456\n");
     write(other, "plain\n");
+    const auto spaces=locationSpaces({{root,"test","fixture",false},{root+"/missing-location","test","missing",false}},cancel);
+    const StorageInfo storage(root);
+    check(spaces[0].capacity==storage.bytesTotal() && spaces[0].available>=0 && spaces[0].available<=spaces[0].capacity,
+          "location space agrees with filesystem capacity and usable free space");
+    check(spaces[1].available==-1 && spaces[1].capacity==-1,"unavailable location reports unknown space");
+    const auto cancelledSpaces=locationSpaces({{root,"test","fixture",false}},std::make_shared<std::atomic_bool>(true));
+    check(cancelledSpaces.first().available==-1,"cancelled location query retains unknown space");
+    check(locationSpaceLabel(-1)=="N/A" && locationSpaceLabel(0)=="0 B" && locationSpaceLabel(1024)=="1.0 KiB" &&
+          locationSpaceLabel(int64(1024)*1024*1024)=="1.0 GiB","location sizes use readable binary units");
     const auto scanned = scanDirectories(root, true, cancel);
     check(scanned.directories.size() == 3, "recursive scan");
+    const auto initial = root + "/branch/sub";
+    Session startup(initial);
+    const auto initialScan = scanStartupTree(initial, cancel);
+    startup.applyStartupTree(initialScan);
+    check(startup.root == "/" && startup.directory == initial && startup.currentDirectory().loaded,
+          "startup retains selected folder in the filesystem tree");
+    check(startup.directories().contains(root) && startup.directories().contains("/") &&
+          !startup.directories().value("/etc").loaded,
+          "startup opens ancestors without recursively logging unrelated branches");
+    startup.move(-1);
+    check(startup.directory == root + "/branch", "Up reaches the parent in the initial tree");
+    startup.move(1);
+    check(startup.directory == initial, "Down returns to the initial folder");
+    const auto interrupted = std::make_shared<std::atomic_bool>(true);
+    const auto cancelledStartup = scanStartupTree(initial, interrupted);
+    check(cancelledStartup.cancelled && cancelledStartup.directories.isEmpty(), "startup scan respects cancellation");
+    Session partial(initial);
+    partial.applyStartupTree({{initialScan.directories[0], initialScan.directories[1]}, true});
+    check(partial.root == root + "/branch" && partial.directory == initial && partial.currentDirectory().loaded,
+          "cancelled startup retains completed ancestors and original selection");
     Session session(root);
     session.apply(scanned, false);
     session.selectDirectory(root + "/branch");
@@ -247,6 +279,44 @@ void operations(const String &root) {
     check(copied.copied && File::exists(root + "/dest/a.txt"), "file copy");
     check(copyFile(root, {source, root + "/dest/a.txt"}, CopyReplace::Never, cancel).skipped,
           "no overwrite copy");
+    const auto large=root+"/large-transfer.bin",target=root+"/dest/large-transfer.bin";
+    const Bytes payload(1024*1024,'x');write(large,payload);
+    TransferProgress progress;int64 previous=0;int updates=0;bool syncing=false,refreshing=false;
+    const auto report=[&](int64 bytes,int64 total,TransferPhase phase){
+        check(bytes>=previous,"transfer progress is monotonic");previous=bytes;
+        if(total>=0)check(total==payload.size(),"transfer total comes from source size");
+        if(phase==TransferPhase::Copying && bytes>0)++updates;
+        if(phase==TransferPhase::Syncing){syncing=true;progress.report(bytes,total,phase);check(transferPercent(progress)==99,"sync is not reported as complete");}
+        refreshing=refreshing || phase==TransferPhase::Refreshing;
+        progress.report(bytes,total,phase);
+    };
+    const auto transfer=copyFile(root,{large,target},CopyReplace::Ask,cancel,report);
+    check(transfer.copied && updates>1 && syncing && refreshing && progress.bytes.load()==payload.size() && transferPercent(progress)==100,"copy reports bytes and completion phases");
+    check(([](const String &path){File f(path);check(f.open(IO::ReadOnly),"read copied transfer fixture");return f.readAll();})(target)==payload,"progress does not change copied data");
+    progress.report(524288,1048576,TransferPhase::Copying);
+    const auto metrics=transferMetrics(progress,1000);
+    check(metrics.contains("50%") && metrics.contains("0.5/1.0 MiB") && metrics.contains("Time: 00:01") && metrics.contains("Left: 00:01") && metrics.contains("0.5 MiB/s"),"transfer metrics use actual bytes and elapsed time");
+    progress.report(0,1048576,TransferPhase::Moving);
+    check(transferMetrics(progress,1000).contains("Moving (rename)") && !transferMetrics(progress,1000).contains("MiB/s"),"rename does not invent transferred bytes");
+    const auto cancelled=std::make_shared<std::atomic_bool>(false);
+    const auto aborted=copyFile(root,{large,root+"/dest/cancelled.bin"},CopyReplace::Ask,cancelled,
+        [&](int64 bytes,int64,TransferPhase phase){if(phase==TransferPhase::Copying && bytes>0)cancelled->store(true);});
+    check(aborted.cancelled && !File::exists(root+"/dest/cancelled.bin") && File::exists(large),"cancel during copy retains source and does not publish partial data");
+    char remoteTemplate[]="/dev/shm/ltc-progress-XXXXXX";
+    const auto remoteName=::mkdtemp(remoteTemplate);
+    const String remotePath=remoteName?String::fromLocal8Bit(remoteName):String{};
+    struct RemoveFixture { String path; ~RemoveFixture(){if(!path.isEmpty()){std::error_code error;std::filesystem::remove_all(path.toUtf8().constData(),error);}} } removeFixture{remotePath};
+    struct stat localStat{},remoteStat{};
+    if(!remotePath.isEmpty() && ::stat(File::encodeName(root).constData(),&localStat)==0 && ::stat(File::encodeName(remotePath).constData(),&remoteStat)==0 && localStat.st_dev!=remoteStat.st_dev){
+        previous=0;updates=0;syncing=refreshing=false;
+        const auto moved=moveFile(root,{large,remotePath+"/moved.bin"},CopyReplace::Ask,cancel,report);
+        check(moved.moved && updates>1 && progress.bytes.load()==payload.size() && transferPercent(progress)==100,"cross-filesystem move reports actual copied bytes");
+        check(!File::exists(large) && ([](const String &path){File f(path);check(f.open(IO::ReadOnly),"read moved transfer fixture");return f.readAll();})(remotePath+"/moved.bin")==payload,"move progress preserves transfer contents");
+        write(large,payload);cancelled->store(false);
+        const auto abortedMove=moveFile(root,{large,remotePath+"/cancelled.bin"},CopyReplace::Ask,cancelled,
+            [&](int64 bytes,int64,TransferPhase phase){if(phase==TransferPhase::Copying && bytes>0)cancelled->store(true);});
+        check(abortedMove.cancelled && File::exists(large) && !File::exists(remotePath+"/cancelled.bin"),"cancel during cross-filesystem move retains source");
+    }
     const auto snapshot = hexSnapshot(other);
     check(saveHexPage(other, snapshot, "plain\n", 0, "PLAIN\n").isEmpty(), "hex edit save");
     check(!saveHexPage(other, snapshot, "plain\n", 0, "again\n").isEmpty(), "stale hex edit rejected");
@@ -355,6 +425,29 @@ void processes() {
           "process cancellation reaps child");
 }
 }
+void directoryLinks(const String &root) {
+    const auto base=root+"/link-navigation",source=base+"/source",target=base+"/target",alias=source+"/alias";
+    check(DirectoryPath(base).mkpath("source") && DirectoryPath(base).mkpath("target/nested"),"directory link fixture");
+    write(source+"/own.txt","OWN");write(target+"/payload.txt","KEEP");
+    check(::symlink("../target",File::encodeName(alias).constData())==0,"relative directory link");
+    const auto cancel=std::make_shared<std::atomic_bool>(false);
+    const auto recursive=scanDirectories(source,true,cancel);
+    check(recursive.directories.size()==1 && recursive.directories.first().directoryLinks.value(alias)==target,"recursive logging records but does not traverse directory links");
+    Session session(source);session.apply(recursive,true);session.tags.insert(source+"/own.txt");
+    check(session.tree().last().name.contains("alias → "+target),"directory link target appears in tree label");
+    session.selectDirectory(alias);const auto browse=scanBrowseDirectory(alias,false,cancel);session.applyBrowse(browse,true);
+    check(session.root=="/" && session.directory==target && session.currentFile()->path==target+"/payload.txt","link browsing selects real target and real file paths");
+    check(session.directories().contains(alias) && session.directories().value(alias).linkTarget==target && session.tags.contains(source+"/own.txt"),"link browsing preserves original branch and tags");
+    check(scanBrowseDirectory(alias+"/nested",false,cancel).navigationTarget==target+"/nested","navigation resolves linked parent components");
+    check(::symlink("source/loop",File::encodeName(base+"/loop").constData())==0 && ::symlink("../loop",File::encodeName(source+"/loop").constData())==0,"circular link fixture");
+    check(scanBrowseDirectory(source+"/loop",false,cancel).navigationTarget.isEmpty() && !scanBrowseDirectory(source+"/loop",false,cancel).directories.first().error.isEmpty(),"circular link reports error without traversal");
+    check(::symlink("../absent",File::encodeName(source+"/broken").constData())==0,"broken link fixture");
+    check(scanBrowseDirectory(source+"/broken",false,cancel).directories.first().error.contains("missing"),"broken directory link error");
+    const auto original=readMetadata(alias);const auto renamed=renameItem(original,"renamed",cancel);
+    check(renamed.renamed && readMetadata(renamed.target).symlink && readMetadata(renamed.target).inode==original.inode && readMetadata(renamed.target).linkTarget==original.linkTarget,"rename moves symbolic link itself and retains relative target");
+    const auto deleted=deleteEmptyDirectory(source,renamed.target,cancel);
+    check(deleted.deleted && deleted.symlink && File::exists(target+"/payload.txt"),"directory delete unlinks symbolic link while keeping target contents");
+}
 int main(int argc, char **argv) {
 #ifdef LTREE_USE_QT
     TerminalApplication application(argc, argv);
@@ -372,6 +465,7 @@ int main(int argc, char **argv) {
         encoding();
         calendarAndJson();
         operations(fixture.path());
+        directoryLinks(fixture.path());
         processes();
         std::cerr << checks << " platform checks passed\n";
         return 0;

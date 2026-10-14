@@ -99,12 +99,21 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_library(ltree-transfer-delay SHARED tests/transfer_delay.cpp)
+    target_link_libraries(ltree-transfer-delay PRIVATE dl pthread)
     add_executable(ltree-platform-tests tests/test_platform.cpp)
     target_link_libraries(ltree-platform-tests PRIVATE ltree_core)
     add_test(NAME ltree-platform-tests COMMAND ltree-platform-tests)
     set_tests_properties(ltree-platform-tests PROPERTIES TIMEOUT 30)
     if(LTREE_BUILD_TERMINAL)
         find_program(LTREE_TEST_PYTHON NAMES python3 REQUIRED)
+    endif()
+    if(LTREE_BUILD_TERMINAL)
+        add_test(NAME ltree-transfer-terminal-progress COMMAND ${CMAKE_COMMAND} -E env
+            "LTC_TEST_BINARY=$<TARGET_FILE:ltc>" "LTREE_PTY_WORK="
+            "LTC_TRANSFER_TEST_DELAY_LIBRARY=$<TARGET_FILE:ltree-transfer-delay>"
+            ${LTREE_TEST_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/transfer_progress_pty.py)
+        set_tests_properties(ltree-transfer-terminal-progress PROPERTIES TIMEOUT 90)
     endif()
     if(LTREE_BUILD_GUI)
         find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -150,6 +159,11 @@ if(BUILD_TESTING)
         target_link_libraries(ltree-stamp-tests PRIVATE ltree_ui Qt6::Test)
         add_test(NAME ltree-stamp-tests COMMAND ltree-stamp-tests)
         set_tests_properties(ltree-stamp-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        add_test(NAME ltree-transfer-progress COMMAND ${CMAKE_COMMAND} -E env
+            "LTREE_TRANSFER_TEST_DELAY=1" "QT_QPA_PLATFORM=offscreen"
+            "LD_PRELOAD=$<TARGET_FILE:ltree-transfer-delay>"
+            $<TARGET_FILE:ltree-tests> transferProgressSpinnerAndCancellation)
+        set_tests_properties(ltree-transfer-progress PROPERTIES TIMEOUT 60)
         add_test(NAME ltree-tests COMMAND ltree-tests)
         set_tests_properties(ltree-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()

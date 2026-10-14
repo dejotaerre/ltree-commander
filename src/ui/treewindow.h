@@ -37,7 +37,7 @@ class TreeWindow : public QWidget {
 public:
     enum class FileDisplay { Name, SizeAttributes, Details, LongName };
     FileDisplay fileDisplay() const { return fileDisplay_; }
-    explicit TreeWindow(const QString &root, QWidget *parent = nullptr);
+    explicit TreeWindow(const QString &root, QWidget *parent = nullptr, bool startupTree = false);
     ~TreeWindow() override;
     const Session &session() const { return session_; }
     bool busy() const { return busy_ || searching_; }
@@ -47,7 +47,7 @@ public:
     bool isSplit() const { return otherSession_.has_value(); }
     int activeSide() const { return activeSide_; }
     const Session *oppositeSession() const { return otherSession_ ? &*otherSession_ : nullptr; }
-    void load(bool recursive, bool preserveTags = false, const QString &directory = {});
+    void load(bool recursive, bool preserveTags = false, const QString &directory = {}, bool startupTree = false);
     bool selectRoot(const QString &path);
     void setTreeSizesVisible(bool visible) { treeSizesVisible_=visible; update(); }
     bool treeSizesVisible() const { return treeSizesVisible_; }
@@ -82,6 +82,10 @@ private:
     void cycleLoggedRoot(int direction);
     bool availPrompt_ = false;
     qint64 availCapacity_ = -1, availBytes_ = -1;
+    QFutureWatcher<Vector<MountPoint>> mountSpaceWatcher_;
+    Cancellation mountSpaceCancel_;
+    bool mountSpaceReload_ = false;
+    void startMountSpaces();
     void refreshAvailable();
     bool graftPrompt_ = false, graftSelected_ = false, graftBrowseParent_ = false, graftLocations_ = false, graftHelp_ = false;
     QString graftInput_, graftDefault_;
@@ -196,6 +200,10 @@ private:
     QVector<FileEntry> copyFiles_;
     QVector<CopyEntry> copyEntries_;
     QFutureWatcher<CopyResult> copyWatcher_;
+    QTimer copyProgressTimer_;
+    QElapsedTimer copyElapsed_;
+    std::shared_ptr<TransferProgress> copyProgress_;
+    int copySpinner_=0;
     void connectCopy();
     void beginCopy(bool single = false, bool move = false, bool flat = false);
     void copyPromptKey(QKeyEvent *);
@@ -303,6 +311,7 @@ private:
     QDate filterDate_ = QDate::currentDate();
     bool busy_ = false;
     bool preserveTags_ = false;
+    bool startupTreeLoad_ = false;
     bool help_ = false;
     bool quitPrompt_ = false;
     bool promptedSpell_ = false;

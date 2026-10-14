@@ -63,6 +63,8 @@ Use Left/Right for chapters, Tab for the index and F to find a word anywhere in 
 = LOGGING A TREE
 Logging reads directory entries into the workspace. Expanding or collapsing the tree changes what is visible; unlogging releases the stored branch. Directory symbolic links are not followed recursively.
 
+Directory links appear as @ name → target. Enter or + opens the real target and selects it inside the filesystem tree; the original link remains available. Broken or circular targets report an error. Recursive logging with * skips links.
+
 : Arrows | Move the selection through directories or files.
 : PgUp / PgDn | Move one screen at a time.
 : Home / End | Move to the first or last entry.
@@ -77,7 +79,7 @@ Logging reads directory entries into the workspace. Expanding or collapsing the 
 = FIND A NAME QUICKLY
 Hold Shift while typing a prefix to move to a matching name. Use | to open a prefix prompt without holding Shift. Shift+Esc clears the prefix.
 
-: L | Select a mounted location or enter a path.
+: L | Select a mounted location or enter a path. Locations displays aligned filesystem, free and total space columns; F5 refreshes them.
 : < / > | Cycle previously logged locations; comma / period also work.
 : F3 | Refresh the current directory or file list.
 : Alt+F3 | Relog and clear tags.
@@ -92,6 +94,7 @@ Hold Shift while typing a prefix to move to a matching name. Use | to open a pre
 : Alt+G | Graft the selected branch into a destination directory; review the source and destination before confirming.
 
 An empty directory can be deleted with D after confirmation. For a populated branch, read the Deletion and Prune chapter first.
+On a symbolic link, D deletes the link itself and R renames the link itself; their confirmations identify the link and keep its target. Graft and Prune require selecting the real directory and do not follow a selected link implicitly.
 )HELP"},
 {HelpTopic::Tags, "Tags, Branch and Showall", R"HELP(
 = INDIVIDUAL AND GROUP COMMANDS
@@ -195,6 +198,10 @@ In a file list, C and M act on the highlighted file. Ctrl variants act on tagged
 : Alt+C / Alt+M | Copy / move tagged files with paths and a filename mask.
 : R | Rename the current file.
 : Ctrl+R | Rename tagged filenames using a mask.
+
+Rename initially selects the complete destination filename, including its extension. Ctrl+C or Ctrl+Insert copies the selection; Ctrl+A selects the complete name again. Esc cancels without renaming.
+
+During transfers, the footer shows the current file, destination, spinner, progress bar, bytes written, speed, elapsed time and estimated time left. Syncing and publishing keep the percentage below 100 until the operation finishes. Esc cancels pending transfers and requests cancellation of the current one.
 
 = PROMPTS AND MASKS
 Review the filename or mask first, then the destination. * preserves the matching name component. The opposite pane provides a convenient destination when split. Check the full path before accepting.
@@ -398,6 +405,9 @@ X opens a shell in the current directory. Use it as your normal shell, then exit
 The user's shell keeps its normal history. LTree does not disable or erase that history. E uses Sublime Text; the alternate editor can be configured with LTREE_ALT_EDITOR.
 
 = STARTUP EXAMPLES
+Without a directory argument, LTree starts in the current working directory in both graphical and terminal modes. An explicit directory argument overrides this default.
+The initial folder stays selected inside the filesystem tree, with its ancestors and neighboring folders visible. Expand other branches with + or *. An explicit directory argument sets the navigation root.
+
 ltc                         Graphical application when a display is available
 ltc /home/alex             Start at a selected directory
 ltc --tree-sizes             Show logged directory size annotations
@@ -558,7 +568,7 @@ The user's X shell keeps normal history. LTree releases the terminal to external
 : M / Ctrl+M / Alt+M | Move current / tagged flat / tagged with directory paths.
 : M (tree) | Create a directory, including nested names.
 : D / Ctrl+D | Delete current / tagged files with confirmation.
-: R / Ctrl+R | Rename current / tagged files with a mask and case selection.
+: R / Ctrl+R | Rename current / tagged files with a mask and case selection. Ctrl+C or Ctrl+Insert copies the selected name; Ctrl+A selects it again. Esc cancels without renaming.
 : A / Ctrl+A | Set permissions of the selected / tagged files.
 : Alt+A (tree) | Set the selected directory's permissions.
 : N / Ctrl+N | Set, adjust or increment written/accessed timestamps.
@@ -572,6 +582,8 @@ The user's X shell keeps normal history. LTree releases the terminal to external
 : F5 / Ctrl+F5 (files) | Create an archive from current / tagged files.
 
 Copy/move accepts a filename mask, letter case, destination, path policy and replacement policy. The destination defaults to the other panel. Existing files and per-file errors offer confirmation, retry, skip or cancel.
+
+During copy/move, the footer shows the file number, source/destination, spinner, progress bar, transferred bytes, speed, elapsed time and remaining estimate. At narrow widths T means elapsed time and L means time left. Syncing, Publishing and Refreshing identify final waits; 100% means completion. Same-filesystem moves display Moving (rename), without counting a data transfer. Esc requests cancellation; blocked filesystem calls must return before cleanup can finish.
 
 Tagged deletion asks Y/N and then "Confirm delete for each file?". After deleting a Branch without failures or skipped files, removing its empty directories and parent requires a separate confirmation. Existing files keep their directories safe. Selection stays close to the removed item.
 

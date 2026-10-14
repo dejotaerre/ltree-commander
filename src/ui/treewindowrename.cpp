@@ -77,6 +77,11 @@ void TreeWindow::renameKey(QKeyEvent *event)
         else if(key==Qt::Key_Y||enter){cancel_=std::make_shared<std::atomic_bool>(false);nextRename();}
         return;
     }
+    if(ctrl && (key==Qt::Key_C || key==Qt::Key_Insert)){
+        if(renameSelected_)QGuiApplication::clipboard()->setText(renameInput_);
+        refresh();return;
+    }
+    if(ctrl && key==Qt::Key_A){renameSelected_=true;renameCursor_=int(renameInput_.size());refresh();return;}
     if(enter){
         renameNames_.clear();QSet<QString> targets,sources;
         for(const auto &item:renameTargets_)sources.insert(item.path);
@@ -116,14 +121,20 @@ void TreeWindow::drawRename(QPainter &p)
         drawCommands(p,0,y+2,"[Y/Enter] Rename  [N] Skip  [A] All  [Esc] Cancel");return;
     }
     if(renameReview_){
-        drawText(p,0,y,QString("RENAME %1 items; existing destinations will be skipped").arg(renameTargets_.size()),theme::labels);
+        drawText(p,0,y,renameTargets_.first().symlink&&!renameBatch_?"RENAME symbolic link only; target is kept":QString("RENAME %1 items; existing destinations will be skipped").arg(renameTargets_.size()),theme::labels);
         drawText(p,0,y+1,QFileInfo(renameTargets_.first().path).fileName()+" -> "+renameNames_.first(),theme::normal);
         drawCommands(p,0,y+2,busy_?"[Esc] Stop after current item":"[Y/Enter] Apply  [N/Esc] Cancel  [Backspace] Edit");return;
     }
-    drawText(p,0,y,renameBatch_?QString("RENAME %1 tagged files as:").arg(renameTargets_.size()):"RENAME: "+renameTargets_.first().path,theme::labels);
+    drawText(p,0,y,renameBatch_?QString("RENAME %1 tagged files as:").arg(renameTargets_.size()):(renameTargets_.first().symlink?"RENAME link: ":"RENAME: ")+renameTargets_.first().path,theme::labels);
     drawInput(p,0,y+1,"as: ",renameInput_,renameCursor_,theme::normal);
+    if(renameSelected_){
+        const int prefix=std::min(4,columns_-1),start=std::max(0,renameCursor_-(columns_-prefix)+1);
+        const auto visible=renameInput_.mid(start).left(columns_-prefix);
+        p.fillRect(prefix*cellWidth_,(y+1)*cellHeight_,visible.size()*cellWidth_,cellHeight_,theme::selection);
+        drawText(p,prefix,y+1,visible,Qt::black);drawCursor(p,prefix+renameCursor_-start,y+1,renameInput_.mid(renameCursor_,1));
+    }
     if(status_.isEmpty())drawCommands(p,0,y+2,renameBatch_?QString("[Enter] Review  [F4] Confirm each (%1)  [Tab] Case (%2)  [Esc] Cancel")
-        .arg(renameEach_?"yes":"no",QStringList{"keep","lower","upper"}[int(renameCase_)]):"[Enter] Review  [Esc] Cancel");
+        .arg(renameEach_?"yes":"no",QStringList{"keep","lower","upper"}[int(renameCase_)]):"[Enter] Review  [Ctrl+C/Insert] Copy name  [Esc] Cancel");
     else drawText(p,0,y+2,status_,theme::labels);
 }
 }

@@ -9,6 +9,27 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Directory link navigation — 2026-10-14
+
+- Both interfaces label directory symbolic links with their target and open the real directory with Enter or +, retaining the original tree branch. Recursive logging skips links; broken/circular targets report an error.
+- Delete and Rename operate on the selected link itself and explicitly keep its target. Graft and Prune reject a selected link with a clear message.
+
+### Start in the current directory — 2026-10-13
+
+- Launching without a directory selects the shell's current working directory inside the filesystem tree in both graphical and terminal modes. Ancestors and neighboring folders are visible for arrow-key navigation; unrelated branches load on demand. Explicit directory arguments retain priority as navigation roots.
+
+### Copy and move progress — 2026-10-10
+
+- Graphical and terminal copy/move show per-file written bytes, percentage, speed, elapsed/remaining time, an animated spinner and a progress bar. Synchronization, publication and pane refresh remain visible; progress reaches 100% after completion. Same-filesystem moves show their rename/synchronization phase without claiming a data copy.
+
+### Location columns and space — 2026-10-07
+
+- Graphical and terminal Locations show aligned Location, Filesystem, Free and Total columns. Space is read in the background, displayed in binary units and refreshed with F5; unresponsive locations show N/A.
+
+### Copy filename from Rename — 2026-10-07
+
+- Rename visibly selects the complete destination filename. Ctrl+C and Ctrl+Insert copy the selection without submitting a rename; Ctrl+A reselects it and Esc cancels. Terminal Rename uses the existing clipboard adapter or internal clipboard.
+
 ### Graphical fullscreen shortcut — 2026-10-07
 
 - Alt+Enter works with both Enter keys across graphical views, including archive browsing/creation and the embedded shell. Leaving fullscreen preserves the previous normal or maximized state; key autorepeat does not toggle it repeatedly.

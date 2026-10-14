@@ -16,6 +16,7 @@ struct Directory {
     bool loaded = false;
     bool collapsed = false;
     String error;
+    String linkTarget{};
 };
 
 struct TreeRow {
@@ -55,6 +56,8 @@ public:
     uint64 revision() const { return revision_; }
     int treeIndex() const;
     void apply(const ScanResult &scan, bool preserveTags);
+    void applyStartupTree(const ScanResult &scan);
+    void applyBrowse(const ScanResult &scan, bool preserveTags);
     bool expandToParent(const ScanResult &scan);
     void selectDirectory(const String &path);
     void move(int delta);

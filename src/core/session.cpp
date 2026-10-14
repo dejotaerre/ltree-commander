@@ -105,13 +105,14 @@ void Session::apply(const ScanResult &scan, bool preserveTags)
             if (!item.children.contains(child)) removeBranch(child, true);
         }
         auto &dir = directories_[item.path];
-        dir = {item.path, item.children, item.files, true, false, {}};
+        dir = {item.path, item.children, item.files, true, false, {}, old.linkTarget};
         for (const auto &child : item.children) {
             if (!directories_.contains(child)) {
                 Directory next;
                 next.path = child;
                 directories_.insert(child, next);
             }
+            directories_[child].linkTarget = item.directoryLinks.value(child);
         }
         Set<String> present;
         for (const auto &file : item.files) present.insert(file.path);
@@ -127,6 +128,37 @@ void Session::apply(const ScanResult &scan, bool preserveTags)
         if (visibleSnapshot_.isEmpty()) tagsOnly = false;
     }
     rebuild();
+}
+
+void Session::applyStartupTree(const ScanResult &scan)
+{
+    const String selected = directory;
+    for (const auto &item : scan.directories) {
+        const ScanResult completed{{item}, false};
+        if (item.path == root) apply(completed, true);
+        else if (!expandToParent(completed)) break;
+    }
+    selectDirectory(selected);
+}
+
+void Session::applyBrowse(const ScanResult &scan, bool preserveTags)
+{
+    if (scan.navigationTarget.isEmpty()) { apply(scan, preserveTags); return; }
+    const String previousRoot = root;
+    root = "/";
+    // Conectar ambas rutas conserva la rama original aunque el enlace apunte fuera de ella.
+    for (String child : StringList{previousRoot, scan.navigationTarget}) {
+        while (child != root) {
+            const String parent = FileInfo(child).absolutePath();
+            auto &entry = directories_[parent];entry.path = parent;
+            if (!entry.children.contains(child)) entry.children.append(child);
+            if (!directories_.contains(child)) { Directory item;item.path=child;directories_.insert(child,item); }
+            child = parent;
+        }
+    }
+    returnToTree();
+    apply(scan, preserveTags);
+    selectDirectory(scan.navigationTarget);
 }
 
 bool Session::expandToParent(const ScanResult &scan)
@@ -244,7 +276,7 @@ void Session::appendTree(const String &path, const String &prefix, bool isLast, 
     const auto found = directories_.constFind(path);
     const auto &dir = found.value();
     tree_.append({path, top ? String{} : prefix + (isLast ? "└─" : "├─"),
-                  top ? root : FileInfo(path).fileName()});
+                  (top ? root : FileInfo(path).fileName()) + (dir.linkTarget.isEmpty() ? String{} : " → " + dir.linkTarget)});
     if (dir.collapsed) return;
     const String childPrefix = top ? String{} : prefix + (isLast ? "  " : "│ ");
     for (int i = 0; i < dir.children.size(); ++i)

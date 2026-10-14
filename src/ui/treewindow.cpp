@@ -38,7 +38,7 @@ QString viewName(View view)
 }
 }
 
-TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), session_(root)
+TreeWindow::TreeWindow(const QString &root, QWidget *parent, bool startupTree) : QWidget(parent), session_(root)
 {
     connectGraft();
     connectPrune();
@@ -50,6 +50,12 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
     connectDirectoryCompare();
     connect(&statsTimer_,&QTimer::timeout,this,[this]{if(extendedStats_){refreshExtendedStats();update();}});
     initializeHistories();
+    connect(&mountSpaceWatcher_, &QFutureWatcher<Vector<MountPoint>>::finished, this, [this] {
+        if (mountSpaceReload_) { mountSpaceReload_=false;startMountSpaces();return; }
+        mounts_=mountSpaceWatcher_.result();
+        if(availPrompt_)refreshAvailable();
+        if(mountPrompt_)update();
+    });
     initialRoot_ = session_.root;
     setWindowTitle("LTree Commander " LTREE_VERSION " — " + session_.root);
     availableBytes_ = QStorageInfo(session_.root).bytesAvailable();
@@ -85,7 +91,10 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
             }
             pendingParent_.clear();
             pendingParentSelection_ = pendingRootDelete_ = pendingRootPrune_ = false;
-        } else session_.apply(result, preserveTags_);
+        } else if (startupTreeLoad_) session_.applyStartupTree(result);
+        else session_.applyBrowse(result, preserveTags_);
+        startupTreeLoad_ = false;
+        if (!result.navigationTarget.isEmpty()) availableBytes_ = QStorageInfo(session_.root).bytesAvailable();
         busy_ = false;
         int errors = 0;
         QString firstError;
@@ -153,7 +162,7 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
             }else session_.removeFile(result.path);
             session_.apply(result.scan,true);
             if(otherSession_)otherSession_->syncLoggingFrom(session_);
-            status_=QString(result.directory?"Directory deleted: ":"File deleted: ")+result.path;
+            status_=QString(result.symlink?"Symbolic link deleted: ":result.directory?"Directory deleted: ":"File deleted: ")+result.path;
             for(const auto &dir:result.scan.directories)if(!dir.error.isEmpty()){
                 status_+="; read error: "+dir.error;break;
             }
@@ -200,7 +209,7 @@ TreeWindow::TreeWindow(const QString &root, QWidget *parent) : QWidget(parent), 
     });
     clock_.setSingleShot(true);
     clock_.start(1000 - QTime::currentTime().msec());
-    load(false, true);
+    load(false, true, {}, startupTree);
 }
 
 TreeWindow::~TreeWindow()
@@ -210,6 +219,8 @@ TreeWindow::~TreeWindow()
     if(graftHistory_.dirty)saveHistory(graftHistory_);
     if(stampHistory_.dirty)saveHistory(stampHistory_);
     if (cancel_) cancel_->store(true);
+    if(mountSpaceCancel_)mountSpaceCancel_->store(true);
+    mountSpaceWatcher_.waitForFinished();
     watcher_.waitForFinished();
     searchWatcher_.waitForFinished();
     makeWatcher_.waitForFinished();
@@ -227,17 +238,18 @@ TreeWindow::~TreeWindow()
     graftBrowseWatcher_.waitForFinished();
 }
 
-void TreeWindow::load(bool recursive, bool preserveTags, const QString &directory)
+void TreeWindow::load(bool recursive, bool preserveTags, const QString &directory, bool startupTree)
 {
     if (busy()) return;
     busy_ = true;
     preserveTags_ = preserveTags;
+    startupTreeLoad_ = startupTree;
     cancel_ = std::make_shared<std::atomic_bool>(false);
     status_ = recursive ? "Logging branch… Esc cancels" : "Logging directory… Esc cancels";
     const QString path = directory.isEmpty()?(session_.view==View::Global && session_.currentFile()?QFileInfo(session_.currentFile()->path).absolutePath():session_.directory):directory;
     const auto cancel = cancel_;
-    watcher_.setFuture(QtConcurrent::run([path, recursive, cancel] {
-        return scanDirectories(path, recursive, cancel);
+    watcher_.setFuture(QtConcurrent::run([path, recursive, cancel, startupTree] {
+        return startupTree ? scanStartupTree(path, cancel) : scanBrowseDirectory(path, recursive, cancel);
     }));
     update();
 }
@@ -598,11 +610,12 @@ void TreeWindow::paintEvent(QPaintEvent *)
             drawText(p,0,end+2,deleteBatchChoice_?"Confirm delete for each file?":deleteEachPrompt_?"Delete this file?":deleteBatchError_?deleteErrorMessage_:busy_?QString("Processing %1/%2").arg(deleteIndex_+1).arg(deleteTargets_.size()):"Permanently delete tagged files in the current list.",yellow);
             drawCommands(p,0,end+3,deleteBatchChoice_?"[Y]: confirm each file    [N]: delete all possible    [Esc]: cancel":deleteEachPrompt_?"[Y] / [Enter]: delete    [N]: skip    [Esc]: cancel":deleteBatchError_?"[R] / [Enter]: retry    [S]: skip    [C] / [Esc]: cancel":busy_?"[Esc]: stop pending deletions":"[Enter] / [Y]: delete all    [N] / [Esc]: cancel");
         }else{
-            const QString label=deleteBranchDirectory_?"DELETE empty branch directory: ":deleteDirectory_?"DELETE empty directory: ":"DELETE file: ";
+            const bool link=QFileInfo(deletePath_).isSymLink();
+            const QString label=link?"DELETE symbolic link: ":deleteBranchDirectory_?"DELETE empty branch directory: ":deleteDirectory_?"DELETE empty directory: ":"DELETE file: ";
             const int available=std::max(3,columns_-int(label.size()));
             const auto path=deletePath_.size()>available?"..."+deletePath_.right(available-3):deletePath_;
             drawText(p,0,end+1,label+path,cyan);
-            drawText(p,0,end+2,deleteBranchDirectory_?"Delete the branch directory and its empty subdirectories?":deleteDirectory_?"Permanently delete the directory if it is empty.":"Permanently delete the selected file.",yellow);
+            drawText(p,0,end+2,link?"Delete the link only; its target and contents are kept.":deleteBranchDirectory_?"Delete the branch directory and its empty subdirectories?":deleteDirectory_?"Permanently delete the directory if it is empty.":"Permanently delete the selected file.",yellow);
             drawCommands(p,0,end+3,"[Enter] / [Y]: delete    [N] / [Esc]: cancel");
         }
     }
@@ -701,7 +714,7 @@ void TreeWindow::drawPane(QPainter &p)
             const auto &dir = row.parent ? parentEntry : found.value();
             const bool selected = row.path == session_.directory;
             if (selected && paintingActive_) p.fillRect(cellWidth_, y * cellHeight_, (right - 1) * cellWidth_, cellHeight_, white);
-            QString state = row.parent || dir.loaded ? " " : "+";
+            QString state = !dir.linkTarget.isEmpty() ? "@" : row.parent || dir.loaded ? " " : "+";
             if (dir.collapsed && !dir.children.isEmpty()) state = dir.loaded ? "·" : ":";
             const QColor ink=selected && paintingActive_?Qt::black:yellow;
             drawText(p, 1, y, state + row.prefix + row.name, ink, sizes?right-sizeWidth-2:right-1);
@@ -884,21 +897,44 @@ void TreeWindow::beginMountPrompt()
     mountIndex_ = 0;
     for (int i = 0; i < mounts_.size(); ++i) if (mounts_[i].path == session_.root) { mountIndex_ = i; break; }
     mountInput_.clear(); mountPrompt_ = true; activeSpell_ = false;
+    startMountSpaces();
     update();
+}
+
+void TreeWindow::startMountSpaces()
+{
+    if(mountSpaceWatcher_.isRunning()){mountSpaceCancel_->store(true);mountSpaceReload_=true;return;}
+    mountSpaceCancel_=std::make_shared<std::atomic_bool>(false);
+    const auto locations=mounts_;const auto cancel=mountSpaceCancel_;
+    mountSpaceWatcher_.setFuture(QtConcurrent::run([locations,cancel]{return locationSpaces(locations,cancel);}));
 }
 
 void TreeWindow::drawMountPrompt(QPainter &p)
 {
     drawText(p, 1, 0, availPrompt_?"AVAILABLE — Mount points / locations":"LOG — Mount points / locations", cyan, columns_ - 2);
     drawCommands(p, 1, 1, availPrompt_?"[Arrows] Select   [Enter/Esc] Return   [F5] Refresh":"[Arrows] + [Enter]: open   [F5]: refresh   [Esc]: cancel", columns_ - 2);
+    int pathWidth=8,typeWidth=10;
+    for(const auto &mount:mounts_){pathWidth=std::max(pathWidth,int(mount.path.size()));typeWidth=std::max(typeWidth,int(mount.type.size())+(mount.readOnly?6:2));}
+    const int sizeWidth=11,totalColumn=columns_-2-sizeWidth,freeColumn=totalColumn-sizeWidth-1;
+    typeWidth=std::min(typeWidth,18);
+    const int typeColumn=std::min(pathWidth+5,freeColumn-typeWidth-2);
+    drawText(p,3,2,"Location",cyan,typeColumn-5);drawText(p,typeColumn,2,"Filesystem",cyan,typeWidth);
+    drawText(p,freeColumn,2,QString("Free").rightJustified(sizeWidth),cyan,sizeWidth);
+    drawText(p,totalColumn,2,QString("Total").rightJustified(sizeWidth),cyan,sizeWidth);
     const int count = rows_ - 8;
     const int start = std::max(0, mountIndex_ - count + 1);
     for (int row = 0, i = start; row < count && i < mounts_.size(); ++row, ++i) {
         const auto &mount = mounts_[i];
         const bool selected = i == mountIndex_;
         if (selected) p.fillRect(cellWidth_, (row + 3) * cellHeight_, (columns_ - 2) * cellWidth_, cellHeight_, white);
-        const QString text = QString(selected ? "> " : "  ") + mount.path + "  [" + mount.type + (mount.readOnly ? ", RO" : "") + "]";
-        drawText(p, 1, row + 3, text, selected ? Qt::black : yellow, columns_ - 2);
+        const auto ink=selected?QColor(Qt::black):yellow;
+        const int room=typeColumn-5;
+        const auto path=mount.path.size()>room?QString("…")+mount.path.right(room-1):mount.path;
+        drawText(p,1,row+3,selected?"> ":"  ",ink,2);drawText(p,3,row+3,path,ink,room);
+        drawText(p,typeColumn,row+3,"["+mount.type+(mount.readOnly?", RO":"")+"]",ink,typeWidth);
+        const auto space=[this](qint64 value){return value<0 && (mountSpaceWatcher_.isRunning() || mountSpaceReload_)?QString("..."):locationSpaceLabel(value);};
+        drawText(p,freeColumn,row+3,space(mount.available).rightJustified(sizeWidth),ink,sizeWidth);
+        drawText(p,totalColumn,row+3,space(mount.capacity).rightJustified(sizeWidth),ink,sizeWidth);
     }
     if (!mounts_.isEmpty()) drawText(p, 1, rows_ - 5, "Source: " + mounts_[mountIndex_].source, cyan, columns_ - 2);
     if(availPrompt_){

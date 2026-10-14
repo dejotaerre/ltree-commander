@@ -76,6 +76,7 @@ void TreeWindow::beginGraft()
 {
     stopAutoview();infoVisible_ = false;activeSpell_ = false;
     graftSource_ = readMetadata(session_.directory);
+    if (graftSource_.symlink) { status_ = "Graft does not move a symbolic link's target; select the real directory to move it";return; }
     if (!graftSource_.error.isEmpty() || !graftSource_.directory || graftSource_.symlink || graftSource_.path == "/") {
         status_ = "Select a real directory below the filesystem root to graft";return;
     }

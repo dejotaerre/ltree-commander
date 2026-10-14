@@ -11,7 +11,13 @@
 namespace ltree {
 void TreeWindow::connectCopy()
 {
+    copyProgressTimer_.setInterval(100);
+    connect(&copyProgressTimer_,&QTimer::timeout,this,[this]{
+        copySpinner_=(copySpinner_+1)%4;
+        update(0,(bottom()+1)*cellHeight_,width(),3*cellHeight_);
+    });
     connect(&copyWatcher_,&QFutureWatcher<CopyResult>::finished,this,[this]{
+        copyProgressTimer_.stop();
         const auto result=copyWatcher_.result();busy_=false;
         // Actualizar también las ubicaciones guardadas evita recuperar listados anteriores al cambiar de panel.
         const auto reconcile=[&](Session &saved){
@@ -65,11 +71,16 @@ void TreeWindow::prepareCopyPlan()
 void TreeWindow::startCopyItem(bool confirmed,bool replace)
 {
     if(copyConfirm_ && !confirmed){copyStep_=CopyStep::Confirm;refresh();return;}
-    copyStep_=CopyStep::Running;busy_=true;
+    copyStep_=CopyStep::Running;busy_=true;status_.clear();
+    copyProgress_=std::make_shared<TransferProgress>();copyElapsed_.start();copySpinner_=0;
+    const auto progress=copyProgress_;copyProgressTimer_.start();
     const auto entry=copyEntries_[copyIndex_];const auto root=copySourceRoot_;const auto cancel=cancel_;
     const auto policy=replace?CopyReplace::Always:copyReplace_;
     const bool move=copyMove_;
-    copyWatcher_.setFuture(QtConcurrent::run([root,entry,policy,cancel,move]{return move?moveFile(root,entry,policy,cancel):copyFile(root,entry,policy,cancel);}));
+    copyWatcher_.setFuture(QtConcurrent::run([root,entry,policy,cancel,move,progress]{
+        const auto report=[progress](qint64 bytes,qint64 total,TransferPhase phase){progress->report(bytes,total,phase);};
+        return move?moveFile(root,entry,policy,cancel,report):copyFile(root,entry,policy,cancel,report);
+    }));
     refresh();
 }
 void TreeWindow::advanceCopy()
@@ -78,6 +89,7 @@ void TreeWindow::advanceCopy()
 }
 void TreeWindow::finishCopy(bool cancelled)
 {
+    copyProgressTimer_.stop();
     busy_=false;copyStep_=CopyStep::None;
     status_=QString("%1 %2: %3/%4 files %5; %6 skipped")
         .arg(copyMove_?"Move":"Copy",cancelled?"cancelled":"completed").arg(copyCount_).arg(copyFiles_.size()).arg(copyMove_?"moved":"copied").arg(copySkipped_);
@@ -206,7 +218,15 @@ void TreeWindow::drawCopyPrompt(QPainter &p)
         pathLine(y,QString("%1 %2/%3: ").arg(operation).arg(copyIndex_+1).arg(copyEntries_.size()),entry.source,theme::labels);
         if(copyStep_==CopyStep::Error)drawText(p,0,y+1,copyError_,theme::normal);
         else pathLine(y+1,copyStep_==CopyStep::Exists?"File exists, replace? ":copyStep_==CopyStep::Confirm?(copyMove_?"Confirm move? ":"Confirm copy? "):"To: ",entry.target,theme::normal);
-        drawCommands(p,0,y+2,copyStep_==CopyStep::Error?"[R]/[Enter] Retry   [S] Skip   [Esc] Cancel":copyStep_==CopyStep::Running?(copyMove_?"[Esc] Stop pending moves":"[Esc] Stop pending copies"):"[Y]/[Enter] Yes   [N] Skip   [A] All   [Esc] Cancel");
+        if(copyStep_==CopyStep::Running && copyProgress_){
+            const int barWidth=std::clamp(columns_/8,4,24);
+            drawText(p,0,y+2,QString("|/-\\").mid(copySpinner_,1),theme::labels,1);
+            p.fillRect(2*cellWidth_,(y+2)*cellHeight_+cellHeight_/3,
+                barWidth*cellWidth_*transferPercent(*copyProgress_)/100,std::max(2,cellHeight_/3),theme::labels);
+            const int room=columns_-barWidth-15;
+            drawText(p,barWidth+3,y+2,transferMetrics(*copyProgress_,copyElapsed_.elapsed(),columns_<120),theme::labels,room);
+            drawCommands(p,columns_-12,y+2,cancel_->load()?"Stopping...":"[Esc] Cancel",12);
+        }else drawCommands(p,0,y+2,copyStep_==CopyStep::Error?"[R]/[Enter] Retry   [S] Skip   [Esc] Cancel":"[Y]/[Enter] Yes   [N] Skip   [A] All   [Esc] Cancel");
     }
     if(!status_.isEmpty()){
         const int row=copySingle_ && copyStep_==CopyStep::Mask?y+2:y+1;

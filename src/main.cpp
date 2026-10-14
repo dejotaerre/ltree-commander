@@ -60,14 +60,14 @@ int main(int argc, char **argv)
         "LTree Commander: file manager for Linux. F1 shows available commands.");
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.addPositionalArgument("directory", "Navigation root; defaults to home (GUI) or the current directory (terminal).");
+    parser.addPositionalArgument("directory", "Navigation root; defaults to the current working directory.");
     parser.addOption({"terminal", "Force the terminal interface; automatic without a graphical environment."});
     parser.addOption({"fullscreen", "Start in fullscreen mode."});
     parser.addOption({"new-instance", "Allow an additional graphical instance; terminal sessions are independent."});
     parser.addOption({"tree-sizes", "Show logged branch sizes beside the directory tree."});
     parser.process(*app);
     if (parser.positionalArguments().size() > 1) parser.showHelp(2);
-    const QString root = parser.positionalArguments().isEmpty() ? (terminal ? QDir::currentPath() : QDir::homePath()) : parser.positionalArguments().first();
+    const QString root = parser.positionalArguments().isEmpty() ? QDir::currentPath() : parser.positionalArguments().first();
     if (!QFileInfo(root).isDir()) {
         std::fprintf(stderr, "Not a directory: %s\n", qPrintable(root));
         return 2;
@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     if (terminal) {
         if (parser.isSet("fullscreen")) { std::fprintf(stderr,"--fullscreen applies to the graphical interface.\n");return 2; }
 #ifdef LTREE_HAS_TERMINAL
-        return ltree::runTerminal(canonical, parser.isSet("tree-sizes"));
+        return ltree::runTerminal(canonical, parser.isSet("tree-sizes"), parser.positionalArguments().isEmpty());
 #else
         std::fprintf(stderr,"This build does not include the terminal interface.\n");return 2;
 #endif
@@ -122,7 +122,7 @@ int main(int argc, char **argv)
             std::fprintf(stderr,"Cannot start the instance server: %s\n",qPrintable(instanceServer.errorString()));return 2;
         }
     }
-    ltree::TreeWindow window(canonical);
+    ltree::TreeWindow window(canonical, nullptr, parser.positionalArguments().isEmpty());
     ltree::restoreWindowGeometry(window);
     QObject::connect(app.get(), &QCoreApplication::aboutToQuit, &window, [&window] {
         ltree::saveWindowGeometry(window);

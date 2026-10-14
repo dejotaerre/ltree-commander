@@ -48,7 +48,8 @@ int main(int argc, char **argv) {
         }
         directory = ltree::String::fromUtf8(argv[i]);
     }
-    if (directory.isEmpty())
+    const bool startupTree = directory.isEmpty();
+    if (startupTree)
         directory = ltree::DirectoryPath::currentPath();
     const ltree::FileInfo info(directory);
     if (!info.isDir()) {
@@ -59,5 +60,5 @@ int main(int argc, char **argv) {
         std::fputs("Terminal mode requires an interactive terminal.\n", stderr);
         return 2;
     }
-    return ltree::runTerminal(info.canonicalFilePath(), sizes);
+    return ltree::runTerminal(info.canonicalFilePath(), sizes, startupTree);
 }

@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
 
@@ -28,7 +29,9 @@ static DeleteResult deleteEntry(const String &root, const String &path, const Ca
     if(parent<0){result.error="Cannot open the source directory: "+String::fromLocal8Bit(std::strerror(errno));return result;}
     if(cancel->load()){::close(parent);result.cancelled=true;return result;}
     // Sin AT_REMOVEDIR se borra solo un archivo o enlace; nunca un directorio ni el destino del enlace.
-    const int outcome=::unlinkat(parent,File::encodeName(parts.last()).constData(),directory?AT_REMOVEDIR:0);
+    const auto name=File::encodeName(parts.last());struct stat entry{};
+    result.symlink=::fstatat(parent,name.constData(),&entry,AT_SYMLINK_NOFOLLOW)==0 && S_ISLNK(entry.st_mode);
+    const int outcome=::unlinkat(parent,name.constData(),directory && !result.symlink?AT_REMOVEDIR:0);
     const int code=errno;::close(parent);
     if(outcome!=0){
         result.error=directory && (code==ENOTEMPTY || code==EEXIST) ? "The directory is not empty" :

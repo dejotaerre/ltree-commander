@@ -84,9 +84,12 @@ bool stageSource(int parent,const Bytes &name,const struct stat &expected,const 
     return true;
 }
 
-CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,bool move=false)
+CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,bool move,const TransferCallback &progress)
 {
     CopyResult result;result.target=entry.target;
+    int64 transferred=0,total=-1;
+    const auto report=[&](TransferPhase phase){if(progress)progress(transferred,total,phase);};
+    report(TransferPhase::Preparing);
     if(entry.source.contains(Char(0)) || entry.target.contains(Char(0)) || !DirectoryPath::isAbsolutePath(entry.target) ||
        entry.source!=DirectoryPath::cleanPath(entry.source) || entry.target!=DirectoryPath::cleanPath(entry.target) || !isWithin(entry.source,sourceRoot)){
         result.error="Invalid source or destination path";return result;
@@ -99,6 +102,7 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
     struct stat info{};
     if(source.fd<0 || ::fstat(source.fd,&info)<0){result.error=systemError("Cannot open source file (links are not followed)");return result;}
     if(!S_ISREG(info.st_mode)){result.error=move?"Moving this file type is not implemented yet":"Copying this file type is not implemented yet";return result;}
+    total=info.st_size;report(TransferPhase::Preparing);
     Descriptor destination(openDirectory(FileInfo(entry.target).absolutePath(),true,&result.created));
     if(destination.fd<0){result.error=systemError("Cannot create destination directory (links are not followed)");return result;}
     Bytes target=File::encodeName(FileInfo(entry.target).fileName());struct stat existing{};
@@ -121,6 +125,7 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
         if(present){result.error="No available sequential filename";return result;}
     }
     if(move){
+        report(TransferPhase::Moving);
         if(cancel->load()){result.cancelled=true;return result;}
         struct stat current{};const bool existsNow=::fstatat(destination.fd,target.constData(),&current,AT_SYMLINK_NOFOLLOW)==0;
         if(!existsNow && errno!=ENOENT){result.error=systemError("Cannot inspect destination");return result;}
@@ -133,7 +138,7 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
         }
         const bool replaceAllowed=present && (replace==CopyReplace::Always || replace==CopyReplace::Older);
         if(::syscall(SYS_renameat2,sourceParent.fd,staged.constData(),destination.fd,target.constData(),replaceAllowed?0:RENAME_NOREPLACE)==0){
-            result.moved=true;
+            result.moved=true;report(TransferPhase::Syncing);
             if(::fsync(destination.fd)<0 || ::fsync(sourceParent.fd)<0)result.error=systemError("File moved, but directory synchronization failed");
             return result;
         }
@@ -155,6 +160,7 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
     if(output.fd<0){result.error=systemError("Cannot create copy");return result;}
     // La copia temporal evita truncar destinos; solo se publica tras completar datos y metadatos.
     const auto cleanup=[&]{::unlinkat(destination.fd,temporary.constData(),0);};
+    report(TransferPhase::Copying);
     char buffer[128*1024];
     while(!cancel->load()){
         const auto count=::read(source.fd,buffer,sizeof(buffer));
@@ -165,11 +171,12 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
             const auto written=::write(output.fd,buffer+offset,size_t(count-offset));
             if(written<0 && errno==EINTR)continue;
             if(written<=0){result.error=systemError("Cannot write destination file");break;}
-            offset+=written;
+            offset+=written;transferred+=written;report(TransferPhase::Copying);
         }
         if(!result.error.isEmpty())break;
     }
     result.cancelled=cancel->load();
+    if(!result.cancelled && result.error.isEmpty())report(TransferPhase::Syncing);
     const timespec times[]{info.st_atim,info.st_mtim};
     if(!result.cancelled && result.error.isEmpty() && (::fchmod(output.fd,info.st_mode&0777)<0 || ::futimens(output.fd,times)<0 || ::fsync(output.fd)<0))
         result.error=systemError("Cannot preserve copy metadata");
@@ -185,6 +192,7 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
     if(existsNow && replace==CopyReplace::Older && !older(now,info)){result.skipped=true;cleanup();return result;}
     const bool replaceAllowed=present && (replace==CopyReplace::Always || replace==CopyReplace::Older);
     if(cancel->load()){result.cancelled=true;cleanup();return result;}
+    report(TransferPhase::Publishing);
     if(::syscall(SYS_renameat2,destination.fd,temporary.constData(),destination.fd,target.constData(),replaceAllowed?0:RENAME_NOREPLACE)<0){
         if(errno==EEXIST){if(replace==CopyReplace::Never)result.skipped=true;else result.exists=true;}
         else result.error=systemError("Cannot publish copied file");
@@ -192,8 +200,10 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
     }
     result.copied=true;
     if(move){
+        report(TransferPhase::Syncing);
         if(::fsync(destination.fd)<0){result.error=systemError("Copy complete; source retained because destination synchronization failed");return result;}
         if(cancel->load()){result.cancelled=true;return result;}
+        report(TransferPhase::RemovingSource);
         Bytes staged;
         if(!stageSource(sourceParent.fd,sourceName,info,entry.source,staged,result)){
             result.error="Copy complete; source retained: "+result.error;return result;
@@ -204,11 +214,45 @@ CopyResult copyOne(const String &sourceRoot,const CopyEntry &entry,CopyReplace r
         if(::unlinkat(sourceParent.fd,staged.constData(),0)<0){
             result.error=systemError("Copy complete; cannot remove source");restoreSource(sourceParent.fd,staged,sourceName,entry.source,result);return result;
         }
-        result.moved=true;
+        result.moved=true;report(TransferPhase::Syncing);
         if(::fsync(sourceParent.fd)<0)result.error=systemError("File moved, but source directory synchronization failed");
     }
     return result;
 }
+}
+
+int transferPercent(const TransferProgress &progress)
+{
+    if(progress.phase.load()==TransferPhase::Completed)return 100;
+    const auto total=progress.total.load(),bytes=progress.bytes.load();
+    return total>0?int(std::clamp(100.0*double(bytes)/double(total),0.0,99.0)):0;
+}
+String transferMetrics(const TransferProgress &progress,int64 elapsedMs,bool compact)
+{
+    const auto phase=progress.phase.load();
+    const auto bytes=progress.bytes.load(),total=progress.total.load();
+    const auto time=[](int64 seconds){return String("%1:%2").arg(seconds/60,2,10,Char('0')).arg(seconds%60,2,10,Char('0'));};
+    const String stage=phase==TransferPhase::Preparing?"Preparing":phase==TransferPhase::Moving?"Moving (rename)":
+        phase==TransferPhase::Syncing?"Syncing":phase==TransferPhase::Publishing?"Publishing":
+        phase==TransferPhase::RemovingSource?"Removing source":phase==TransferPhase::Refreshing?"Refreshing":
+        phase==TransferPhase::Completed?"Completed":"";
+    if(total<0 || (bytes==0 && phase!=TransferPhase::Copying && phase!=TransferPhase::Completed))
+        return stage+"  Time: "+time(elapsedMs/1000);
+    const StringList units{"B","KiB","MiB","GiB","TiB","PiB","EiB"};
+    int unit=0;double divisor=1;
+    while(double(total)/divisor>=1024 && unit+1<units.size()){divisor*=1024;++unit;}
+    const double rate=elapsedMs>0?double(bytes)*1000.0/double(elapsedMs):0;
+    const String left=phase==TransferPhase::Copying && rate>0 && bytes<total?time(int64(double(total-bytes)/rate)):String("--:--");
+    const String amount=String::number(double(bytes)/divisor,'f',unit?1:0)+"/"+
+        String::number(double(total)/divisor,'f',unit?1:0)+" "+units[unit];
+    String result=(stage.isEmpty()?String{}:stage+" ")+String::number(transferPercent(progress))+"%  "+amount;
+    const String speed=String::number(rate/1048576,'f',1);
+    if(compact){
+        result+=" "+speed+"MiB/s T:"+time(elapsedMs/1000);
+        if(phase==TransferPhase::Copying)result+=" L:"+left;
+        return result;
+    }
+    return result+"  Time: "+time(elapsedMs/1000)+"  Left: "+left+"  ("+speed+" MiB/s)";
 }
 
 String copyName(const String &name,const String &input,CopyCase letterCase,String *error)
@@ -268,25 +312,33 @@ CopyPlan planCopy(const Vector<FileEntry> &files,const String &sourceDirectory,c
     return result;
 }
 
-CopyResult copyFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
+CopyResult copyFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,const TransferCallback &progress)
 {
-    auto result=copyOne(sourceRoot,entry,replace,cancel);
+    int64 bytes=0,total=-1;
+    const auto report=[&](int64 done,int64 size,TransferPhase phase){bytes=done;total=size;if(progress)progress(done,size,phase);};
+    auto result=copyOne(sourceRoot,entry,replace,cancel,false,report);
     Set<String> affected;
     for(const auto &path:result.created)affected.insert(FileInfo(path).absolutePath());
     if(result.copied)affected.insert(FileInfo(result.target).absolutePath());
+    if(progress && !affected.isEmpty())progress(bytes,total,TransferPhase::Refreshing);
     const auto refresh=std::make_shared<std::atomic_bool>(false);
     for(const auto &path:affected)result.scan.directories+=scanDirectories(path,false,refresh).directories;
+    if(progress && result.copied && result.error.isEmpty() && !result.cancelled)progress(bytes,total,TransferPhase::Completed);
     return result;
 }
-CopyResult moveFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel)
+CopyResult moveFile(const String &sourceRoot,const CopyEntry &entry,CopyReplace replace,const Cancellation &cancel,const TransferCallback &progress)
 {
-    auto result=copyOne(sourceRoot,entry,replace,cancel,true);
+    int64 bytes=0,total=-1;
+    const auto report=[&](int64 done,int64 size,TransferPhase phase){bytes=done;total=size;if(progress)progress(done,size,phase);};
+    auto result=copyOne(sourceRoot,entry,replace,cancel,true,report);
     Set<String> affected;
     for(const auto &path:result.created)affected.insert(FileInfo(path).absolutePath());
     if(result.copied || result.moved)affected.insert(FileInfo(result.target).absolutePath());
     affected.insert(FileInfo(entry.source).absolutePath());
+    if(progress && !affected.isEmpty())progress(bytes,total,TransferPhase::Refreshing);
     const auto refresh=std::make_shared<std::atomic_bool>(false);
     for(const auto &path:affected)result.scan.directories+=scanDirectories(path,false,refresh).directories;
+    if(progress && result.moved && result.error.isEmpty() && !result.cancelled)progress(bytes,total,TransferPhase::Completed);
     return result;
 }
 }

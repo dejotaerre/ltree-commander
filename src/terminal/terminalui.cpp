@@ -68,8 +68,25 @@ class TerminalUI {
     StringList filespecHistory_;
     int cursor_ = 0, historyIndex_ = -1, locationIndex_ = 0, locationTop_ = 0, viewerTop_ = 0;
     Vector<MountPoint> locations_;
+    Future<Vector<MountPoint>> locationSpaceFuture_;
+    Cancellation locationSpaceCancel_;
+    bool locationSpacePending_=false, locationSpaceReload_=false;
+    void startLocationSpaces() {
+        if(locationSpacePending_){locationSpaceCancel_->store(true);locationSpaceReload_=true;return;}
+        locationSpaceCancel_=std::make_shared<std::atomic_bool>(false);
+        const auto locations=locations_;const auto cancel=locationSpaceCancel_;
+        locationSpaceFuture_=runAsync([locations,cancel]{return locationSpaces(locations,cancel);});
+        locationSpacePending_=true;
+    }
+    void finishLocationSpaces() {
+        if(!locationSpacePending_ || !locationSpaceFuture_.isFinished())return;
+        locationSpacePending_=false;
+        if(locationSpaceReload_){locationSpaceReload_=false;startLocationSpaces();return;}
+        locations_=locationSpaceFuture_.result();
+    }
     bool help_ = false, location_ = false, viewer_ = false, hex_ = false, quit_ = false;
     bool sizes_ = false, colors_ = false, parentLoad_ = false, preserveTags_ = true;
+    bool startupTreeLoad_ = false;
     Work work_ = Work::None;
     Cancellation cancel_;
     Future<ScanResult> scan_;
@@ -264,7 +281,7 @@ class TerminalUI {
             for (int row = 2, i = pane.treeTop; row < divider() && i < s.tree().size(); ++row, ++i) {
                 const auto &item = s.tree()[i];const Directory parentEntry;const auto &dir = item.parent ? parentEntry : s.directories()[item.path];const bool current = item.path == s.directory;
                 if (current && focused) fill(x + 1, row, area - 2, 3);
-                text(x + 1, row, String(item.parent || dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
+                text(x + 1, row, String(!dir.linkTarget.isEmpty() ? "@" : item.parent || dir.loaded ? " " : "+") + item.prefix + item.name, current && focused ? 3 : 2, area - (sizes ? 17 : 2));
                 if (sizes && !item.parent) text(x + area - 15, row, sizes->value(item.path).label(), current && focused ? 3 : 2, 14);
                 if (current && !focused) text(x + 1, row, "►", 3, 1);
             }
@@ -355,11 +372,23 @@ class TerminalUI {
         else if (location_) {
             text(1, 0, avail_?"AVAILABLE SPACE — choose a mount or enter a path":"LOCATIONS — choose a mount or enter a path", 2);
             locationTop_ = std::clamp(locationTop_, std::max(0, locationIndex_ - (rows_ - 5) + 1), locationIndex_);
+            int pathWidth=8,typeWidth=10;
+            for(const auto &mount:locations_){pathWidth=std::max(pathWidth,int(mount.path.size()));typeWidth=std::max(typeWidth,int(mount.type.size())+(mount.readOnly?6:2));}
+            const int sizeWidth=columns_>=70?11:8,totalColumn=columns_-2-sizeWidth,freeColumn=totalColumn-sizeWidth-1;
+            typeWidth=std::min(typeWidth,std::min(18,freeColumn-10));
+            const int typeColumn=std::min(pathWidth+5,freeColumn-typeWidth-2),room=std::max(1,typeColumn-5);
+            text(3,1,"Location",1,room);text(typeColumn,1,"Filesystem",1,typeWidth);
+            text(freeColumn,1,String("Free").rightJustified(sizeWidth),1,sizeWidth);text(totalColumn,1,String("Total").rightJustified(sizeWidth),1,sizeWidth);
             for (int row = 2, i = locationTop_; row < rows_ - 3 && i < locations_.size(); ++row, ++i) {
                 if (i == locationIndex_) fill(1, row, columns_ - 2, 3);
-                text(1, row, locations_[i].path + "  " + locations_[i].type, i == locationIndex_ ? 3 : 2, columns_ - 2);
+                const auto &mount=locations_[i];const int ink=i==locationIndex_?3:2;
+                text(1,row,i==locationIndex_?"> ":"  ",ink,2);text(3,row,pathLabel(mount.path,room),ink,room);
+                text(typeColumn,row,"["+mount.type+(mount.readOnly?", RO":"")+"]",ink,typeWidth);
+                const auto space=[this](int64 value){return value<0 && (locationSpacePending_ || locationSpaceReload_)?String("..."):locationSpaceLabel(value);};
+                text(freeColumn,row,space(mount.available).rightJustified(sizeWidth),ink,sizeWidth);
+                text(totalColumn,row,space(mount.capacity).rightJustified(sizeWidth),ink,sizeWidth);
             }
-            if(avail_&&!locations_.isEmpty()){auto stats=systemStatistics(locations_[locationIndex_].path);text(0,rows_-3,String("Capacity %1  Available %2 bytes  %3").arg(stats.capacity).arg(stats.available).arg(stats.filesystem),2);}
+            if(avail_&&!locations_.isEmpty()){const auto &mount=locations_[locationIndex_];text(0,rows_-3,String("Capacity %1  Available %2  %3").arg(locationSpaceLabel(mount.capacity),locationSpaceLabel(mount.available),mount.type),2);}
             commands(0, rows_ - 2, "[Arrows] Select  [Enter] Open  [/] Enter path  [F5] Refresh  [Esc] Cancel");
         } else {
             if (other_) {
@@ -436,12 +465,13 @@ class TerminalUI {
         previewCancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = previewCancel_;
         previewRead_ = runAsync([path, cancel] { return readViewDocument(path, cancel); });
     }
-    void load(bool recursive, bool preserve = true, const String &path = {}, bool parent = false)
+    void load(bool recursive, bool preserve = true, const String &path = {}, bool parent = false, bool startupTree = false)
     {
         invalidateAutoview();cancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = cancel_;
         const String target = path.isEmpty() ? active_.session.directory : path;
         parentLoad_ = parent;preserveTags_ = preserve;work_ = Work::Scan;
-        scan_ = runAsync([target, recursive, cancel] { return scanDirectories(target, recursive, cancel); });
+        startupTreeLoad_ = startupTree;
+        scan_ = runAsync([target, recursive, cancel, startupTree] { return startupTree ? scanStartupTree(target, cancel) : scanBrowseDirectory(target, recursive, cancel); });
     }
     void complete()
     {
@@ -459,7 +489,9 @@ class TerminalUI {
             for (const auto &dir : result.scan.directories) if (!dir.error.isEmpty()) { status_ += "; read error: " + dir.error;break; }
         } else if (work_ == Work::Scan && scan_.isFinished()) {
             const auto result = scan_.result();work_ = Work::None;
-            if (parentLoad_) active_.session.expandToParent(result);else active_.session.apply(result, preserveTags_);
+            if (startupTreeLoad_) active_.session.applyStartupTree(result);
+            else if (parentLoad_) active_.session.expandToParent(result);else active_.session.applyBrowse(result, preserveTags_);
+            startupTreeLoad_ = false;
             if (other_) other_->session.apply(result, true);
             status_ = result.cancelled ? "Logging cancelled" : std::exchange(editorNotice_, String());
             for (const auto &dir : result.directories) if (!dir.error.isEmpty()) { status_ = dir.error;break; }
@@ -817,7 +849,7 @@ class TerminalUI {
             else if (value == KEY_UP) locationIndex_ = std::max(0, locationIndex_ - 1);
             else if (value == KEY_DOWN) locationIndex_ = std::min(std::max(0, int(locations_.size()) - 1), locationIndex_ + 1);
             else if (value == '/' || letter == 'p') openPrompt(Prompt::Path, value == '/' ? "/" : String());
-            else if (value == KEY_F(5)) locations_ = mountedLocations();
+            else if (value == KEY_F(5)) {locations_ = mountedLocations();locationIndex_=std::clamp(locationIndex_,0,std::max(0,int(locations_.size())-1));startLocationSpaces();}
             else if ((value == 10 || value == 13 || value == KEY_ENTER) && !locations_.isEmpty()) selectRoot(locations_[locationIndex_].path);
             return;
         }
@@ -865,7 +897,7 @@ class TerminalUI {
         else if (value == KEY_F(7)) startAutoview();
         else if (letter == 'f') openPrompt(Prompt::Filespec);
         else if (letter == '|') openPrompt(Prompt::Spell);
-        else if (letter == 'l') { avail_=false;locations_ = mountedLocations();locationIndex_ = locationTop_ = 0;location_ = true; }
+        else if (letter == 'l') { avail_=false;locations_ = mountedLocations();locationIndex_ = locationTop_ = 0;location_ = true;startLocationSpaces(); }
         else if (value == KEY_F(8)) { stopAutoview();if (other_) { other_.reset();side_ = 0; }else { other_ = active_;side_ = 0; } }
         else if (value == 9 && other_) { stopAutoview();if (other_->session.root == s.root) other_->session.syncLoggingFrom(s);std::swap(active_, *other_);side_ = 1 - side_; }
         else if (value == 10 || value == 13 || value == KEY_ENTER) {
@@ -890,17 +922,19 @@ class TerminalUI {
         else status_ = "Not available in terminal mode; F1 shows supported commands";
     }
 public:
-    TerminalUI(const String &root, bool sizes, bool colors) : active_(root), sizes_(sizes), colors_(colors) { initializeTerminalHistories();load(false); }
+    TerminalUI(const String &root, bool sizes, bool colors, bool startupTree) : active_(root), sizes_(sizes), colors_(colors) { initializeTerminalHistories();load(false, true, {}, false, startupTree); }
     ~TerminalUI() {
         saveTerminalHistories();
         if (cancel_) cancel_->store(true);
         if (previewCancel_) previewCancel_->store(true);
+        if(locationSpaceCancel_)locationSpaceCancel_->store(true);
+        locationSpaceFuture_.waitForFinished();
         scan_.waitForFinished();document_.waitForFinished();metadata_.waitForFinished();previewRead_.waitForFinished();
     }
     int run()
     {
         while (!quit_ && !stopped) {
-            TerminalApplication::processEvents();complete();publishGlobal();updateAutoview();viewerTick();draw();
+            TerminalApplication::processEvents();finishLocationSpaces();complete();publishGlobal();updateAutoview();viewerTick();draw();
             const auto input = keyboard_.read();
             if (input) key(input->value,input->alt,input->literal,input->control);
         }
@@ -908,7 +942,7 @@ public:
     }
 };
 }
-int runTerminal(const String &root, bool treeSizes)
+int runTerminal(const String &root, bool treeSizes, bool startupTree)
 {
     if (!::isatty(STDIN_FILENO) || !::isatty(STDOUT_FILENO)) { std::fprintf(stderr, "Terminal mode requires an interactive terminal on stdin and stdout.\n");return 2; }
     std::setlocale(LC_CTYPE, "");
@@ -968,7 +1002,7 @@ int runTerminal(const String &root, bool treeSizes)
     stopped = 0;
     const auto previousTerm = std::signal(SIGTERM, stopTerminal), previousInt = std::signal(SIGINT, stopTerminal), previousHup = std::signal(SIGHUP, stopTerminal);
     int result;
-    { TerminalUI ui(root, treeSizes, colors);result = ui.run(); }
+    { TerminalUI ui(root, treeSizes, colors, startupTree);result = ui.run(); }
     endwin();delscreen(screen);
     std::signal(SIGTERM, previousTerm);std::signal(SIGINT, previousInt);std::signal(SIGHUP, previousHup);
     return result;

@@ -65,6 +65,7 @@ void cycleRoot(int direction) {
 }
 void availability() {
   locations_ = mountedLocations();
+  startLocationSpaces();
   location_ = true;
   avail_ = true;
   locationIndex_ = locationTop_ = 0;

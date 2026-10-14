@@ -60,8 +60,7 @@ void TreeWindow::refreshAvailable()
 {
     availCapacity_=availBytes_=-1;
     if(mounts_.isEmpty())return;
-    const QStorageInfo storage(mounts_[mountIndex_].path);
-    if(storage.isValid() && storage.isReady()){availCapacity_=storage.bytesTotal();availBytes_=storage.bytesAvailable();}
+    availCapacity_=mounts_[mountIndex_].capacity;availBytes_=mounts_[mountIndex_].available;
 }
 void TreeWindow::connectLink()
 {

@@ -230,7 +230,8 @@ std::optional<String> historyPopup(const String &key, const String &draft) {
 std::optional<String>
 ask(const String &label, String input = {}, const String &history = {},
     const std::function<String()> &options = {},
-    const std::function<bool(int, String &)> &optionKey = {}) {
+    const std::function<bool(int, String &)> &optionKey = {},
+    bool copySelection = false) {
   int cursor = input.size();
   bool selected = !input.isEmpty();
   while (!stopped) {
@@ -245,6 +246,12 @@ ask(const String &label, String input = {}, const String &history = {},
     const int start = std::max(0, cursor - (columns_ - int(label.size()) - 2));
     fill(0, rows_ - 3, columns_, 2);
     text(0, rows_ - 3, label + input.mid(start), 2);
+    if (copySelection && selected) {
+      const int prefix = std::min(int(label.size()), columns_ - 1);
+      const auto visible = input.mid(start).left(columns_ - prefix);
+      fill(prefix, rows_ - 3, visible.size(), 3);
+      text(prefix, rows_ - 3, visible, 3);
+    }
     const int cx =
         std::clamp(int(label.size()) + cursor - start, 0, columns_ - 1);
     wmove(stdscr, rows_ - 3, cx);
@@ -254,6 +261,15 @@ ask(const String &label, String input = {}, const String &history = {},
     int k = nextKey(&literal);
     if (k < 0)
       continue;
+    if (copySelection && (k == 3 || k == 0x2606)) {
+      if (selected) { clipboard_ = input; publishClipboard(); }
+      continue;
+    }
+    if (copySelection && k == 1) {
+      selected = true;
+      cursor = input.size();
+      continue;
+    }
     if (k == 27 || k == 3) {
       curs_set(0);
       return {};
@@ -393,18 +409,21 @@ bool confirm(const String &question) {
   }
   return false;
 }
-template <class Function> auto task(const String &label, Function function) {
+template <class Function> auto task(const String &label, Function function, const std::function<void()> &progress = {}) {
   cancel_ = std::make_shared<std::atomic_bool>(false);
   const auto token = cancel_;
   auto future =
       runAsync([function, token] { return function(token); });
   while (!future.isFinished()) {
     draw();
-    fill(0, rows_ - 1, columns_, 1);
-    commands(0, rows_ - 1,
-             String("%1 %2 [Esc] Cancel")
-                 .arg(String("|/-\\")[spinner_++ % 4])
-                 .arg(label));
+    if(progress)progress();
+    else{
+      fill(0, rows_ - 1, columns_, 1);
+      commands(0, rows_ - 1,
+               String("%1 %2 [Esc] Cancel")
+                   .arg(String("|/-\\")[spinner_++ % 4])
+                   .arg(label));
+    }
     wrefresh(stdscr);
     int k = nextKey();
     if (k == 27 || k == 3 || stopped)

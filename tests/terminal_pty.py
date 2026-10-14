@@ -60,17 +60,18 @@ class Screen:
   self.grid[self.r][min(self.c,self.cols-1)]=ch;self.last=ch;self.c=min(self.cols-1,self.c+1)
  def text(self):return '\n'.join(''.join(line).rstrip() for line in self.grid)
 class App:
- def __init__(self,name,files,shared_runtime=None,terminal_args=None):
+ def __init__(self,name,files,shared_runtime=None,terminal_args=None,extra_env=None,startup_directory=None):
   self.dir=work/name;shutil.rmtree(self.dir,ignore_errors=True);self.dir.mkdir();self.root=self.dir/'root';self.root.mkdir();self.home=self.dir/'home';self.home.mkdir();self.runtime=Path(shared_runtime) if shared_runtime is not None else self.home/'runtime';self.runtime.mkdir(exist_ok=True);self.runtime.chmod(0o700)
   for name,content in files.items():p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(content)
   self.screen=Screen();self.transcript=bytearray();self.master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',32,140,0,0))
   env=os.environ.copy()
   for k in ['DISPLAY','WAYLAND_DISPLAY','QT_QPA_PLATFORM','LTREE_HISTORY_FILE']:env.pop(k,None)
   env.update(HOME=str(self.home),XDG_CONFIG_HOME=str(self.home/'config'),XDG_RUNTIME_DIR=str(self.runtime),HISTFILE=str(self.home/'history'),TERM='xterm-256color',LANG='C.UTF-8')
+  if extra_env:env.update(extra_env)
   def setup():os.setsid();fcntl.ioctl(0,termios.TIOCSCTTY,0)
   self.env=env
   args=['--terminal'] if terminal_args is None else terminal_args
-  self.proc=subprocess.Popen([os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc')]+args+[str(self.root)],stdin=slave,stdout=slave,stderr=slave,env=env,preexec_fn=setup);os.close(slave);self.read(.5)
+  self.proc=subprocess.Popen([os.environ.get('LTC_TEST_BINARY','/home/hector/fuentes/ltree-commander/build/ltc')]+args+([] if startup_directory is not None else [str(self.root)]),cwd=self.root/startup_directory if startup_directory is not None else None,stdin=slave,stdout=slave,stderr=slave,env=env,preexec_fn=setup);os.close(slave);self.read(.5)
  def read(self,seconds=.15):
   end=time.monotonic()+seconds
   while time.monotonic()<end:
@@ -136,6 +137,21 @@ def independent_instances():
   if gui is not None and gui.poll() is None:gui.terminate();gui.wait(timeout=5)
   log.close();shutil.rmtree(runtime)
 
+def rename_clipboard():
+ adapter=work/'clipboard-adapter';adapter.mkdir(exist_ok=True)
+ copied=adapter/'copied.txt';stub=adapter/'wl-copy';stub.write_text('#!/bin/sh\ncat > "$LTC_CLIPBOARD_TEST_FILE"\n');stub.chmod(0o700)
+ name='ASÍ LOS HACKERS [iJQ5KFBCJI].webm'
+ a=App('rename-clipboard',{name:b'safe'},extra_env={'WAYLAND_DISPLAY':'fixture-only','PATH':str(adapter)+os.pathsep+os.environ['PATH'],'LTC_CLIPBOARD_TEST_FILE':str(copied)})
+ try:
+  a.send('\r');a.send('t')
+  for key in ['\x03',b'\x1b[2;5~']:
+   copied.write_text('sentinel');a.send('r');a.wait('RENAME as:');a.send(key,.3)
+   a.check('Rename copies complete Unicode filename without submitting',copied.read_text()==name and 'RENAME as:' in a.screen.text() and (a.root/name).read_bytes()==b'safe')
+   a.send('\x1b');a.check('Rename copy and cancel retain file and tag',(a.root/name).exists() and a.screen.text().count('♦')==1)
+  a.send('r');a.send(b'\x1b[D');copied.write_text('sentinel');a.send('\x03');a.check('Copy without selection preserves clipboard',copied.read_text()=='sentinel')
+  a.send('\x01');a.send(b'\x1b[2;5~');a.check('Ctrl+A reselects full filename',copied.read_text()==name);a.send('\x1b')
+ finally:a.close()
+
 def parent_row():
  a=App('parent-row',{'child/file.txt':b'safe','top.txt':b'kept'})
  try:
@@ -148,6 +164,20 @@ def parent_row():
   a.check('Filesystem root has no duplicate parent entry',''.join(a.screen.grid[2]).split('│')[1].strip()=='/' and ''.join(a.screen.grid[3]).split('│')[1].strip()!='/')
  finally:a.close()
 
+
+def location_columns():
+ a=App('location-columns',{'fixture.txt':b'safe'})
+ try:
+  a.send('l');a.wait('LOCATIONS');header=''.join(a.screen.grid[1]);fs=header.index('Filesystem');free=header.index('Free');total=header.index('Total')
+  a.check('Locations has separate path filesystem free and total columns',header.index('Location')<fs<free<total)
+  rows=[''.join(row) for row in a.screen.grid[2:a.screen.rows-3] if '[' in ''.join(row)]
+  a.check('Filesystem column stays aligned for every location',len(rows)>0 and all(row[fs]=='[' for row in rows))
+  deadline=time.monotonic()+20
+  while '...' in a.screen.text() and time.monotonic()<deadline:a.read(.1)
+  rows=[''.join(row) for row in a.screen.grid[2:a.screen.rows-3] if '[' in ''.join(row)]
+  a.check('Locations displays total and free space',all(row[total-7:total+5].strip() and row[free-7:free+4].strip() for row in rows) and '...' not in a.screen.text())
+  a.send(F5);a.check('Locations refresh stays in the picker','LOCATIONS' in a.screen.text());a.send('\r',.4);a.check('Locations Enter still opens selected folder','<TREE:' in a.screen.text())
+ finally:a.close()
 
 def locations_enter():
  for name,enter,protocol in [('return','\r',False),('newline','\n',False),('keypad',b'\x1bOM',False),('kitty','\x1b[13;1:1u',True),('kitty-keypad','\x1b[57414;1:1u',True)]:
@@ -163,10 +193,38 @@ def locations_enter():
   finally:a.close()
 
 
+def startup_tree_context():
+ a=App('startup-tree',{'01-before/before.txt':b'before','02-current/current.txt':b'current','03-after/after.txt':b'after'},startup_directory='02-current')
+ try:
+  a.wait('current');a.check('Startup retains folder selection with preceding neighbor in the tree', '02-current' in a.screen.text().splitlines()[0] and '01-before' in a.screen.text())
+  a.send(UP);a.check('Startup Up selects preceding neighbor','01-before' in a.screen.text().splitlines()[0])
+  a.send(DOWN);a.check('Startup Down returns to original folder','02-current' in a.screen.text().splitlines()[0])
+  a.send(DOWN);a.check('Startup Down selects following neighbor','03-after' in a.screen.text().splitlines()[0])
+  a.send(HOME);a.check('Startup Home reaches filesystem root',a.screen.text().splitlines()[0].strip()=='/')
+ finally:a.close()
+
+def directory_links():
+ a=App('directory-links',{'own.txt':b'OWN'})
+ target=a.dir/'outside-target';target.mkdir();(target/'payload.txt').write_bytes(b'KEEP');alias=a.root/'nav-link';alias.symlink_to(target,target_is_directory=True)
+ try:
+  a.send(F3);a.wait('nav-link →');a.check('Directory link target is labeled in tree','@' in a.screen.text())
+  a.send('*');a.check('Recursive logging leaves link target untouched','payload' not in a.screen.text())
+  a.send(DOWN);a.send('\x1bg');a.wait("Graft does not move");a.send('\x1bp');a.wait('Prune does not follow')
+  a.send('\r');a.wait('payload');a.check('Enter opens real linked directory','outside-target' in a.screen.text().splitlines()[0])
+  a.send('l');a.wait('LOCATIONS');a.send('/');a.wait('LOG path:');a.send('\x15'+str(a.root)+'\r');a.send(DOWN)
+  a.send('r');a.wait('RENAME link as:');a.send('\x15renamed-link\r');a.wait('target kept');a.send('y');a.wait('Rename:')
+  a.check('Rename retains link and its target',(a.root/'renamed-link').is_symlink() and (target/'payload.txt').read_bytes()==b'KEEP')
+  a.send('d');a.wait('target kept');a.send('y');a.wait('Symbolic link deleted');a.check('Delete removes link and keeps target contents',not (a.root/'renamed-link').is_symlink() and (target/'payload.txt').read_bytes()==b'KEEP')
+ finally:a.close()
+
 def main():
  a=None
  try:
+  directory_links()
+  startup_tree_context()
+  rename_clipboard()
   parent_row()
+  location_columns()
   locations_enter()
   independent_instances()
   a=App('transfers',{'a.txt':b'needle\n','b.txt':b'other\n','c.txt':b'third\n'})

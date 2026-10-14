@@ -1,6 +1,7 @@
 #include "platform/platform.h"
 #include "fs/mounts.h"
 #include <algorithm>
+#include <limits>
 
 namespace ltree {
 namespace {
@@ -15,6 +16,40 @@ String decode(const Bytes &text)
     }
     return String::fromUtf8(result);
 }
+}
+String locationSpaceLabel(int64 bytes)
+{
+    if (bytes < 0) return "N/A";
+    if (bytes < 1024) return String::number(bytes) + " B";
+    const StringList units{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"};
+    double value = double(bytes); int unit = 0;
+    while (value >= 1024 && unit + 1 < units.size()) { value /= 1024; ++unit; }
+    return String::number(value, 'f', value >= 100 ? 0 : 1) + " " + units[unit];
+}
+Vector<MountPoint> locationSpaces(Vector<MountPoint> locations, const std::shared_ptr<std::atomic_bool> &cancel)
+{
+    const auto program = Paths::findExecutable("stat");
+    for (auto &location : locations) {
+        location.available = location.capacity = -1;
+        if (cancel->load() || program.isEmpty()) break;
+        // Limitar la consulta permite salir aunque un NAS no responda.
+        Process process; process.start(program, {"-f", "-c", "%a %b %S", "--", location.path});
+        if (!process.waitForStarted(500)) continue;
+        ElapsedTimer timer; timer.start();
+        while (!process.waitForFinished(100) && !cancel->load() && timer.elapsed() < 2000) {}
+        if (cancel->load() || process.state() != Process::NotRunning) {
+            process.kill(); process.waitForFinished(500); continue;
+        }
+        if (process.exitCode() != 0) continue;
+        const auto fields = process.readAllStandardOutput().trimmed().split(' ');
+        if (fields.size() != 3) continue;
+        bool availableOk=false, totalOk=false, blockOk=false;
+        const auto available=String::fromLatin1(fields[0]).toULongLong(&availableOk), total=String::fromLatin1(fields[1]).toULongLong(&totalOk), block=String::fromLatin1(fields[2]).toULongLong(&blockOk);
+        const auto maximum=uint64(std::numeric_limits<int64>::max());
+        if (!availableOk || !totalOk || !blockOk || !block || available > maximum/block || total > maximum/block) continue;
+        location.available=int64(available*block);location.capacity=int64(total*block);
+    }
+    return locations;
 }
 Vector<MountPoint> parseMountInfo(const Bytes &data, bool includeSystem)
 {

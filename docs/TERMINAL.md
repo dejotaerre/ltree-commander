@@ -22,6 +22,10 @@ Some traditional terminals send identical bytes for Ctrl+I/Tab, Ctrl+M/Enter and
 
 ## File manager
 
+Launching without a directory argument keeps the current working directory selected inside the filesystem tree. Ancestors and neighboring folders appear immediately for arrow-key navigation; other branches expand with + or *. An explicit directory argument sets a navigation root.
+
+Directory links are marked @ and show name → target. Enter or + opens and selects the real target while retaining the original link in the tree. * skips links during recursive logging. D removes the selected link and R renames it, with explicit link-only confirmation; the target is kept. Graft and Prune do not follow a selected link. Broken/circular targets show a readable error.
+
 | Scope | Commands |
 | --- | --- |
 | Tree | A Avail, B Branch, C Compare directory, D Delete empty directory, F Filespec, G Global, H Symbolic link, M Make directory, R Rename, S Showall, X Shell, ? Statistics |
@@ -34,10 +38,15 @@ Some traditional terminals send identical bytes for Ctrl+I/Tab, Ctrl+M/Enter and
 - The tree shows the actual parent path above its current root, with the current folder indented as its child. Up or a mouse click selects that parent and keeps the loaded branch, tags and filter. Enter reads/opens the selected parent; `/` has no parent entry. Home still selects the current tree root.
 - Enter switches tree/file views and opens archives. Backspace returns to the tree/parent, including from an empty file list.
 - F8 splits the display; Tab changes panes. Shift+F8 offers swapping and statistics panel preferences. Ctrl+F6 combines tags. Ctrl+F7/F8/F9 tag, untag or invert the tree branch.
+- Locations aligns path, filesystem, Free and Total columns. Sizes use binary units (GiB/TiB); Free is space available to the current user. Queries run in the background with a timeout for unresponsive locations. `...` indicates a pending query and `N/A` unavailable statistics. F5 refreshes the list and sizes.
 - L selects a mounted location or typed path; `<`/`>` and comma/period cycle registered roots, retaining their state. Tab/Shift+Tab select sibling directories in a single tree pane; Ctrl+Tab works when its distinct sequence is available.
 - Shift+letters and digits spell a name incrementally; `"` finds the next match. `|` opens the editable Spell prompt. Shift+Backspace/Esc erase/reset when the terminal sends distinct sequences.
 - Shift+Left/Right/Home adjust/reset the extension column. F7 Autoview uses Shift+letters/function keys for viewer commands, Shift+navigation to scroll and Alt+Left/Right/Home for its width.
 - POSIX permissions or actual DOS HRSA attributes are displayed according to the filesystem, with symbolic links indicated separately. A edits POSIX modes; N changes Written/Accessed/Both timestamps through Set/Adjust/Increment with review before applying.
+
+Copy/move displays the current file number, source and destination, written bytes, percentage, speed, elapsed/remaining time, an animated spinner and a progress bar. The compact footer uses T for elapsed time and L for time left. Syncing/Publishing/Refreshing remain visible and completion reaches 100% after the final work. Same-filesystem moves report their rename phase. Esc requests cancellation; a blocked filesystem call must return before cleanup finishes.
+
+Rename initially selects the destination filename. Ctrl+C or Ctrl+Insert copies it using the existing desktop clipboard adapter (wl-copy or xclip); without an adapter it remains in the internal clipboard. Ctrl+A selects the full name again, and Esc cancels without renaming.
 
 Transfers offer an editable mask, letter case, destination browsing and replacement policy. Alt+C/M additionally select Full/Current/Relative/Flat paths. Ctrl+D first asks Y/N, then **Confirm delete for each file?**. A successful Branch batch offers a separate confirmation for the empty branch and parent. Failed or skipped files prevent that follow-up. Delete is permanent. Prune requires typing **PRUNE**, with keep-current-files, only-empty, force-read-only and trash options.
 
@@ -92,5 +101,7 @@ J/Ctrl+J compares files in text/Hex with split layouts, per-byte/row differences
 Window position, pixel size, zoom and font belong to the terminal emulator/compositor. Terminal colors and key transmission depend on TERM and the emulator. A desktop clipboard is used through an installed `wl-copy` or `xclip` when available; the internal clipboard and Gather-to-file remain usable without a desktop. Printing uses files or an installed command instead of a Qt printer dialog. X temporarily hands the existing terminal to a shell and restores the file manager on return.
 
 ## Automated validation
+
+CTest also checks copy/move progress and cancellation with an isolated delay applied only to temporary transfer files, including cross-filesystem moves and 80-column rendering.
 
 CTest includes four real pseudoterminal suites covering transfers, deletion/Prune/Graft, two-pane refresh, tags/Global, search/regex/history, viewer/reload/Autoview/Hex editing, archives in nine formats, comparison, shell integration, contextual help and Kitty keyboard press/release events. Each run uses disposable files and a private HOME/config/runtime/history, without a desktop or personal shell history.

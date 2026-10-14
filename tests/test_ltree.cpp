@@ -13,6 +13,7 @@
 #include <QProcessEnvironment>
 #include <QFontInfo>
 #include <QClipboard>
+#include <QMimeData>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -657,13 +658,46 @@ while True:
         QCOMPARE(readMetadata(base+"/new.txt").inode,before.inode);QCOMPARE(readMetadata(base+"/new.txt").mode,quint32(0));
         const auto dir=readMetadata(base+"/dir");result=renameItem(dir,"renamed-dir",cancel);QVERIFY2(result.renamed,qPrintable(result.error));
         QVERIFY(QFileInfo::exists(base+"/renamed-dir/sub/.keep"));QCOMPARE(readMetadata(base+"/renamed-dir").inode,dir.inode);
-        QVERIFY(QFile::link(base+"/exists.txt",base+"/link"));QVERIFY(!renameItem(readMetadata(base+"/link"),"no",cancel).renamed);
+        QVERIFY(QFile::link(base+"/exists.txt",base+"/link"));QVERIFY(renameItem(readMetadata(base+"/link"),"renamed-link",cancel).renamed);
+        QVERIFY(QFileInfo(base+"/renamed-link").isSymLink());QVERIFY(QFileInfo::exists(base+"/exists.txt"));
         QVERIFY(QFile::link(base+"/renamed-dir",base+"/parent-link"));QVERIFY(!renameItem(readMetadata(base+"/parent-link/sub/.keep"),"no",cancel).renamed);
         const auto stale=readMetadata(base+"/exists.txt");QVERIFY(QFile::remove(base+"/exists.txt"));write(base+"/exists.txt","REPLACED");
         QVERIFY(!renameItem(stale,"bad",cancel).renamed);QVERIFY(QFileInfo::exists(base+"/exists.txt"));
         QVERIFY(!renameItem(readMetadata(base+"/exists.txt"),"../bad",cancel).renamed);
         cancel->store(true);QVERIFY(renameItem(readMetadata(base+"/exists.txt"),"cancelled",cancel).cancelled);
         QVERIFY(QDir(base).entryList({".ltree-rename-*"},QDir::AllEntries|QDir::Hidden).isEmpty());
+    }
+    void renameClipboardSelectionAndCancel()
+    {
+        auto *clipboard=QGuiApplication::clipboard();auto saved=std::make_unique<QMimeData>();
+        if(const auto *data=clipboard->mimeData())for(const auto &format:data->formats())saved->setData(format,data->data(format));
+        const auto restore=qScopeGuard([&]{clipboard->setMimeData(saved.release());});
+        const auto base=root+"/rename-clipboard";QVERIFY(QDir().mkdir(base));
+        const auto name=QString::fromUtf8("ASÍ LOS HACKERS CONSIGUEN PREMIUM GRATIS [iJQ5KFBCJI].webm");
+        write(base+"/"+name,"SAFE");
+        TreeWindow window(base);window.show();QTRY_VERIFY(!window.busy());
+        QTest::keyClick(&window,Qt::Key_R);QTest::keyClick(&window,Qt::Key_Insert,Qt::ControlModifier);
+        QCOMPARE(clipboard->text(),QString("rename-clipboard"));QTest::keyClick(&window,Qt::Key_Escape);
+        QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_T);
+        const auto tags=window.session().tags;
+        for(const auto key:{Qt::Key_C,Qt::Key_Insert}){
+            clipboard->setText("sentinel");QTest::keyClick(&window,Qt::Key_R);
+            const auto image=window.grab().toImage();const auto ratio=image.devicePixelRatio();
+            QCOMPARE(image.pixelColor(qRound(32*ratio),qRound((window.rows()-3)*16*ratio)),QColor(192,192,192));
+            capture(window,"rename-selected-copy");
+            QTest::keyClick(&window,key,Qt::ControlModifier);QCOMPARE(clipboard->text(),name);
+            QVERIFY(!window.busy());QCOMPARE(window.session().currentFile()->path,base+"/"+name);
+            QTest::keyClick(&window,Qt::Key_Escape);QCOMPARE(window.session().tags,tags);
+            QVERIFY(QFileInfo::exists(base+"/"+name));QCOMPARE(readMetadata(base+"/"+name).size,qint64(4));
+        }
+        QTest::keyClick(&window,Qt::Key_R);QTest::keyClick(&window,Qt::Key_Left);
+        clipboard->setText("no-selection");QTest::keyClick(&window,Qt::Key_C,Qt::ControlModifier);
+        QCOMPARE(clipboard->text(),QString("no-selection"));
+        QTest::keyClick(&window,Qt::Key_A,Qt::ControlModifier);QTest::keyClick(&window,Qt::Key_C,Qt::ControlModifier);QCOMPARE(clipboard->text(),name);
+        QTest::keyClicks(&window,"renamed.webm");QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_Y);
+        QTRY_VERIFY(window.status().contains("Rename completed"));QVERIFY(QFileInfo::exists(base+"/renamed.webm"));
+        QTest::keyClick(&window,Qt::Key_R,Qt::ControlModifier);QTest::keyClick(&window,Qt::Key_C,Qt::ControlModifier);
+        QCOMPARE(clipboard->text(),QString("*.*"));QTest::keyClick(&window,Qt::Key_Escape);QVERIFY(QFileInfo::exists(base+"/renamed.webm"));
     }
     void renameMasksSplitAndDirectoryCache()
     {
@@ -881,6 +915,34 @@ while True:
         QVERIFY(window.status().contains("1/2"));QVERIFY(window.status().contains("1 skipped"));QCOMPARE(window.session().tags,QSet<QString>{source+"/a.txt"});
         QVERIFY(QFileInfo::exists(source+"/a.txt"));QVERIFY(!QFileInfo::exists(source+"/b.txt"));QVERIFY(QFileInfo::exists(destination+"/b.txt"));
         QCOMPARE(window.session().currentFile()->path,source+"/a.txt");capture(window,"alt-move-replacement-skipped");
+    }
+    void transferProgressSpinnerAndCancellation()
+    {
+        if(!qEnvironmentVariableIsSet("LTREE_TRANSFER_TEST_DELAY"))QSKIP("Run with the isolated slow-transfer fixture");
+        for(const bool move:{false,true})for(const bool cancel:{false,true}){
+            QTemporaryDir source(root+"/progress-XXXXXX"),destination(move?"/dev/shm/ltree-progress-XXXXXX":root+"/destination-XXXXXX");
+            QVERIFY(source.isValid());QVERIFY(destination.isValid());
+            if(move){struct stat a{},b{};::stat(QFile::encodeName(source.path()).constData(),&a);::stat(QFile::encodeName(destination.path()).constData(),&b);if(a.st_dev==b.st_dev)QSKIP("A second filesystem is unavailable");}
+            const QByteArray data(8*1024*1024,'x');const QString from=source.path()+"/large.bin",to=destination.path()+"/large.bin";write(from,data);
+            TreeWindow window(source.path());window.resize(640,400);window.show();QTRY_VERIFY(!window.busy());
+            QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,move?Qt::Key_M:Qt::Key_C);
+            QTest::keyClick(&window,Qt::Key_Return);QTest::keyClicks(&window,destination.path());QTest::keyClick(&window,Qt::Key_Return);
+            const auto temporary=[&]{const auto names=QDir(destination.path()).entryList({".ltree-copy-*"},QDir::Files|QDir::Hidden);return names.isEmpty()?QString{}:destination.path()+'/'+names.first();};
+            QTRY_VERIFY(!temporary().isEmpty() && QFileInfo(temporary()).size()>0 && QFileInfo(temporary()).size()<data.size());
+            QTest::qWait(110);QVERIFY(window.busy());
+            const auto spinner=window.grab(QRect(0,(window.rows()-2)*16,8,16)).toImage();
+            QTest::qWait(110);QVERIFY(window.grab(QRect(0,(window.rows()-2)*16,8,16)).toImage()!=spinner);
+            const auto bar=window.grab().toImage();bool advanced=false;
+            for(int x=16;x<96;++x)if(bar.pixelColor(x,(window.rows()-2)*16+6)==QColor(0,255,255))advanced=true;
+            QVERIFY(advanced);capture(window,move?"move-progress-80":"copy-progress-80");
+            QTRY_VERIFY(!temporary().isEmpty() && QFileInfo(temporary()).size()==data.size());QTest::qWait(110);
+            QVERIFY(window.busy());QVERIFY(!QFileInfo::exists(to));capture(window,move?"move-syncing-80":"copy-syncing-80");
+            if(cancel)QTest::keyClick(&window,Qt::Key_Escape);
+            QTRY_VERIFY_WITH_TIMEOUT(!window.busy(),10000);
+            if(cancel){QVERIFY(QFileInfo::exists(from));QVERIFY(!QFileInfo::exists(to));QVERIFY(window.status().contains("cancelled"));}
+            else{QFile file(to);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),data);QCOMPARE(QFileInfo::exists(from),!move);}
+            QVERIFY(temporary().isEmpty());
+        }
     }
     void moveEngineSameFilesystemMetadataAndInode()
     {
@@ -2538,7 +2600,8 @@ while True:
         const QString hidden=root+"/hidden",child=root+"/child",target=root+"/beta/vacio";
         QVERIFY(QDir().mkpath(hidden));write(hidden+"/.secret");QVERIFY(QDir().mkpath(child+"/sub"));
         for(const auto &path:QStringList{hidden,child})QVERIFY(deleteEmptyDirectory(root,path,cancel).error.contains("not empty"));
-        QVERIFY(QFile::link(target,root+"/link"));QVERIFY(!deleteEmptyDirectory(root,root+"/link",cancel).deleted);QVERIFY(QFileInfo(root+"/link").isSymLink());
+        QVERIFY(QFile::link(target,root+"/link"));const auto deletedLink=deleteEmptyDirectory(root,root+"/link",cancel);
+        QVERIFY(deletedLink.deleted);QVERIFY(deletedLink.symlink);QVERIFY(!QFileInfo(root+"/link").isSymLink());QVERIFY(QFileInfo::exists(target));
         QVERIFY(QFile::link(root+"/beta",root+"/linked-parent"));QVERIFY(!deleteEmptyDirectory(root,root+"/linked-parent/vacio",cancel).deleted);QVERIFY(QFileInfo::exists(target));
         cancel->store(true);const auto stopped=deleteEmptyDirectory(root,target,cancel);QVERIFY(stopped.cancelled);QVERIFY(!stopped.deleted);QVERIFY(QFileInfo::exists(target));
         QFile secret(hidden+"/.secret");QVERIFY(secret.open(QIODevice::ReadOnly));QCOMPARE(secret.readAll(),QByteArray("ordenes\n"));
@@ -3601,6 +3664,21 @@ while True:
         QCOMPARE(window.session().tags, tags);
         QCOMPARE(window.session().view, View::Directory);
     }
+    void locationColumnsAndSpaceAtNarrowWidth()
+    {
+        TreeWindow window(root);window.resize(640,400);window.show();QTRY_VERIFY(!window.busy());
+        QTest::keyClick(&window,Qt::Key_L);
+        const auto total=locationSpaceLabel(QStorageInfo("/").bytesTotal()).rightJustified(11);
+        QImage expected(11*8,16,QImage::Format_RGB32);expected.fill(QColor(0,0,128));ConsoleFont font;
+        {QPainter painter(&expected);for(int i=0;i<total.size();++i)QVERIFY(font.draw(painter,i*8,0,total.mid(i,1),QColor(255,255,0)));}
+        const auto totalVisible=[&]{const auto image=window.grab().toImage();const auto ratio=image.devicePixelRatio();
+            const auto actual=image.copy(qRound((window.columns()-13)*8*ratio),qRound(3*16*ratio),qRound(11*8*ratio),qRound(16*ratio));
+            return actual.convertToFormat(QImage::Format_RGB32)==expected.scaled(actual.size(),Qt::IgnoreAspectRatio,Qt::FastTransformation);};
+        QTRY_VERIFY_WITH_TIMEOUT(totalVisible(),20000);
+        capture(window,"locations-columns-space-80");
+        QTest::keyClick(&window,Qt::Key_F5);QTRY_VERIFY_WITH_TIMEOUT(totalVisible(),20000);
+        QTest::keyClick(&window,Qt::Key_Escape);QCOMPARE(window.session().directory,root);
+    }
     void logKeyboardPrompt()
     {
         TreeWindow window(panel); window.show(); QTRY_VERIFY(!window.busy());
@@ -4040,6 +4118,52 @@ while True:
     {
         if(priorHistorySet_)qputenv("LTREE_HISTORY_FILE",priorHistoryFile_);else qunsetenv("LTREE_HISTORY_FILE");
         if(priorShellHistorySet_)qputenv("HISTFILE",priorShellHistoryFile_);else qunsetenv("HISTFILE");
+    }
+    void directoryLinksBrowseRenameDeleteAndGuards()
+    {
+        const auto base=root+"/link-navigation",source=base+"/source",target=base+"/target",alias=source+"/nav-link";
+        QVERIFY(QDir().mkpath(source));QVERIFY(QDir().mkpath(target));write(source+"/own.txt","OWN");write(target+"/payload.txt","KEEP");
+        QVERIFY(::symlink("../target",QFile::encodeName(alias).constData())==0);
+        TreeWindow window(source);window.resize(1280,800);window.show();QTRY_VERIFY(!window.busy());
+        QVERIFY(window.session().tree().last().name.contains("nav-link → "+target));capture(window,"directory-link-label");
+        QTest::keyClicks(&window,"*");QTRY_VERIFY(!window.busy());QVERIFY(!window.session().directories().value(alias).loaded);
+        QTest::keyClick(&window,Qt::Key_Down);QCOMPARE(window.session().directory,alias);
+        QTest::keyClick(&window,Qt::Key_G,Qt::AltModifier);QVERIFY(window.status().contains("symbolic link"));
+        QTest::keyClick(&window,Qt::Key_P,Qt::AltModifier);QVERIFY(window.status().contains("symbolic links"));
+        QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());QCOMPARE(window.session().directory,target);
+        QCOMPARE(window.session().root,QString("/"));QCOMPARE(window.session().currentFile()->path,target+"/payload.txt");
+        QVERIFY(window.session().directories().contains(alias));capture(window,"directory-link-target");
+        QVERIFY(window.selectRoot(source));QTRY_VERIFY(!window.busy());QTest::keyClick(&window,Qt::Key_Down);
+        QTest::keyClick(&window,Qt::Key_R);QTest::keyClicks(&window,"renamed-link");QTest::keyClick(&window,Qt::Key_Return);
+        capture(window,"directory-link-rename-review");QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());
+        QVERIFY(QFileInfo(source+"/renamed-link").isSymLink());QVERIFY(QFileInfo::exists(target+"/payload.txt"));
+        QTest::keyClick(&window,Qt::Key_D);capture(window,"directory-link-delete-review");QTest::keyClick(&window,Qt::Key_Y);QTRY_VERIFY(!window.busy());
+        QVERIFY(!QFileInfo(source+"/renamed-link").isSymLink());QFile payload(target+"/payload.txt");QVERIFY(payload.open(QIODevice::ReadOnly));QCOMPARE(payload.readAll(),QByteArray("KEEP"));
+    }
+    void systemBinDirectoryLinkBrowsing()
+    {
+        if(!QFileInfo("/bin").isSymLink())QSKIP("System /bin is not a directory link");
+        TreeWindow window("/");window.resize(1280,800);window.show();QTRY_VERIFY(!window.busy());
+        QTest::keyClicks(&window,"BIN",Qt::ShiftModifier);QCOMPARE(window.session().directory,QString("/bin"));
+        QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());
+        QCOMPARE(window.session().directory,QFileInfo("/bin").canonicalFilePath());QVERIFY(!window.session().files().isEmpty());
+        capture(window,"system-bin-link-target");
+    }
+    void startupTreeKeepsFolderAndNeighborNavigation()
+    {
+        const auto parent=QFileInfo(panel).absolutePath();
+        QVERIFY(QDir().mkpath(parent+"/a-before"));QVERIFY(QDir().mkpath(parent+"/z-after"));
+        TreeWindow window(panel,nullptr,true);window.resize(1280,800);window.show();
+        QTRY_VERIFY(!window.busy());
+        QCOMPARE(window.session().root,QString("/"));QCOMPARE(window.session().directory,panel);
+        QVERIFY(window.session().currentDirectory().loaded);
+        QVERIFY(window.session().directories().contains(root));QVERIFY(window.session().directories().contains(parent+"/a-before"));
+        capture(window,"startup-tree-context");
+        QTest::keyClick(&window,Qt::Key_Up);QCOMPARE(window.session().directory,parent+"/a-before");
+        QTest::keyClick(&window,Qt::Key_Down);QCOMPARE(window.session().directory,panel);
+        QTest::keyClick(&window,Qt::Key_Down);QCOMPARE(window.session().directory,panel+"/modulos");
+        QTest::keyClick(&window,Qt::Key_Down);QCOMPARE(window.session().directory,parent+"/z-after");
+        QTest::keyClick(&window,Qt::Key_Home);QCOMPARE(window.session().directory,QString("/"));
     }
     void shallowAndRecursiveLoading()
     {

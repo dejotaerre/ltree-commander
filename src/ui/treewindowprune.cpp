@@ -58,10 +58,11 @@ void TreeWindow::beginPrune()
     if (session_.directory == session_.root) {
         pendingRootPrune_ = true;navigateParent(true);return;
     }
+    pruneSource_ = readMetadata(session_.directory);
+    if (pruneSource_.symlink) { status_ = "Prune does not follow symbolic links; select the real directory to prune it";return; }
     if (!session_.currentDirectory().loaded || !session_.currentDirectory().error.isEmpty()) {
         status_ = "Log the current directory before pruning; * logs its branch";return;
     }
-    pruneSource_ = readMetadata(session_.directory);
     if (!pruneSource_.error.isEmpty() || !pruneSource_.directory || pruneSource_.symlink) {
         status_ = "Select a real logged directory to prune";return;
     }

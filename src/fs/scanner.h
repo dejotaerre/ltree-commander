@@ -23,15 +23,19 @@ struct DirectoryScan {
     StringList children;
     Vector<FileEntry> files;
     String error;
+    Map<String, String> directoryLinks{};
 };
 
 struct ScanResult {
     Vector<DirectoryScan> directories;
     bool cancelled = false;
+    String navigationTarget{};
 };
 
 using Cancellation = std::shared_ptr<std::atomic_bool>;
 ScanResult scanDirectories(const String &path, bool recursive, const Cancellation &cancel, const StringList &boundaries = {});
+ScanResult scanStartupTree(const String &directory, const Cancellation &cancel);
+ScanResult scanBrowseDirectory(const String &path, bool recursive, const Cancellation &cancel);
 bool isWithin(const String &path, const String &base);
 
 }
