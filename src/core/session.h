@@ -79,7 +79,6 @@ public:
     void syncGlobalFrom(const Session &source);
     void removeDirectory(const String &path);
     void removeFile(const String &path);
-    void setFileWritable(const String &path, bool writable);
     void renamePath(const String &source, const String &target);
     void graftPath(const String &source, const String &target);
     void setCompareFilter(const Set<String> &paths, SortKey key);

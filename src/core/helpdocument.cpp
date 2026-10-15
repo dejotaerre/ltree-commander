@@ -252,7 +252,7 @@ Check the branch path and every option. Do not assume a deletion can be undone. 
 : Ctrl+A (files) | Change permissions of tagged files.
 : Alt+A (tree) | Change permissions of the selected directory.
 
-The permission prompt supports Linux permission modes and shows a review before Y/N confirmation. Symbolic changes are applied to each file's existing permissions. Read the result for skipped files or errors.
+The permission prompt supports Linux permission modes. A in a file list applies the entered mode with Enter, without another confirmation; Esc cancels before submitting. Ctrl+A for tagged files and Alt+A for a directory show a review before Y/N confirmation. Symbolic changes are applied to each file's existing permissions. Read the result for skipped files or errors.
 
 = NEW DATE
 : N | Change timestamps of the current file.

@@ -171,9 +171,14 @@ private:
     QString permissionsInput_;
     int permissionsCursor_ = 0;
     quint32 permissionsMode_ = 0;
-    QFutureWatcher<PermissionResult> permissionsWatcher_;
+    struct PermissionUpdateResult {
+        PermissionResult change;
+        ScanResult scan;
+    };
+    QFutureWatcher<PermissionUpdateResult> permissionsWatcher_;
     struct PermissionBatchResult {
         QVector<QPair<FileMetadata, PermissionResult>> items;
+        ScanResult scan;
         bool cancelled = false;
     };
     bool permissionsBatch_ = false;
@@ -181,11 +186,13 @@ private:
     QVector<quint32> permissionsModes_;
     QFutureWatcher<PermissionBatchResult> permissionsBatchWatcher_;
     void connectMetadata();
+    void refreshPermissions(const ScanResult &);
     void beginInfo();
     void refreshInfo();
     QRect infoRect() const;
     void drawInfo(QPainter &);
     void beginPermissions(bool tagged = false);
+    void applyPermissions();
     void permissionsKey(QKeyEvent *);
     void drawPermissions(QPainter &);
     enum class CopyStep { None, Mask, Destination, MakePath, Paths, Replace, Confirm, Exists, Error, Running };

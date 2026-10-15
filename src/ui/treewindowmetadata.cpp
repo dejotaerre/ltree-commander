@@ -17,8 +17,7 @@ void TreeWindow::connectMetadata()
         int changed=0,failed=0;QString firstError;
         for(const auto &item:batch.items){
             if(item.second.changed){
-                ++changed;session_.setFileWritable(item.first.path,item.second.writable);
-                if(otherSession_)otherSession_->setFileWritable(item.first.path,item.second.writable);
+                ++changed;
             }else if(!item.second.error.isEmpty()){
                 ++failed;if(firstError.isEmpty())firstError=item.first.path+": "+item.second.error;
             }
@@ -26,20 +25,30 @@ void TreeWindow::connectMetadata()
         status_=QString("Permissions %1: %2/%3 changed; %4 failed").arg(batch.cancelled?"cancelled":"completed")
             .arg(changed).arg(permissionsTargets_.size()).arg(failed);
         if(!firstError.isEmpty())status_+="; "+firstError;
+        refreshPermissions(batch.scan);
         refresh();
     });
-    connect(&permissionsWatcher_,&QFutureWatcher<PermissionResult>::finished,this,[this]{
-        const auto result=permissionsWatcher_.result();busy_=false;
+    connect(&permissionsWatcher_,&QFutureWatcher<PermissionUpdateResult>::finished,this,[this]{
+        const auto update=permissionsWatcher_.result();const auto &result=update.change;busy_=false;
         permissionsPrompt_=permissionsReview_=false;
         status_=result.changed?"Permissions changed to "+permissionOctal(result.mode)+" ("+permissionText(result.mode)+")":
             result.cancelled?"Permissions cancelled":"Permissions not changed: "+result.error;
-        if(result.changed && permissionsBefore_.regular){
-            session_.setFileWritable(permissionsBefore_.path,result.writable);
-            if(otherSession_)otherSession_->setFileWritable(permissionsBefore_.path,result.writable);
-        }
-        if(infoVisible_)refreshInfo();
+        refreshPermissions(update.scan);
         refresh();
     });
+}
+
+void TreeWindow::refreshPermissions(const ScanResult &scan)
+{
+    const auto reconcile=[&](Session &saved){if(!scan.directories.isEmpty())saved.apply(scan,true);};
+    reconcile(session_);if(otherSession_)reconcile(*otherSession_);
+    if(globalReturn_)reconcile(*globalReturn_);
+    if(otherGlobalReturn_)reconcile(*otherGlobalReturn_);
+    for(auto &saved:rootHistory_)reconcile(saved);
+    for(auto &saved:otherRootHistory_)reconcile(saved);
+    for(auto &saved:loggedRoots_)reconcile(saved);
+    for(const auto &directory:scan.directories)if(!directory.error.isEmpty()){status_+="; read error: "+directory.error;break;}
+    if(infoVisible_)refreshInfo();
 }
 
 void TreeWindow::refreshInfo()
@@ -121,6 +130,36 @@ void TreeWindow::beginPermissions(bool tagged)
     }
     permissionsPrompt_=true;permissionsReview_=false;permissionsInput_.clear();permissionsCursor_=0;
 }
+void TreeWindow::applyPermissions()
+{
+    permissionsReview_=true;
+    busy_=true;cancel_=std::make_shared<std::atomic_bool>(false);
+    if(permissionsBatch_){
+        const auto targets=permissionsTargets_;const auto modes=permissionsModes_;const auto cancel=cancel_;
+        status_="Changing tagged file permissions…";
+        permissionsBatchWatcher_.setFuture(QtConcurrent::run([targets,modes,cancel]{
+            PermissionBatchResult batch;QSet<QString> directories;
+            for(int i=0;i<targets.size();++i){
+                if(cancel->load()){batch.cancelled=true;break;}
+                auto result=changePermissions(targets[i],modes[i],cancel);
+                batch.items.append({targets[i],result});
+                if(result.changed && targets[i].regular)directories.insert(QFileInfo(targets[i].path).absolutePath());
+                if(result.cancelled){batch.cancelled=true;break;}
+            }
+            const auto refresh=std::make_shared<std::atomic_bool>(false);
+            for(const auto &directory:directories)batch.scan.directories+=scanDirectories(directory,false,refresh).directories;
+            return batch;
+        }));return;
+    }
+    const auto before=permissionsBefore_;const auto mode=permissionsMode_;const auto cancel=cancel_;
+    status_="Changing permissions…";
+    permissionsWatcher_.setFuture(QtConcurrent::run([before,mode,cancel]{
+        PermissionUpdateResult update;update.change=changePermissions(before,mode,cancel);
+        if(update.change.changed && before.regular)
+            update.scan=scanDirectories(QFileInfo(before.path).absolutePath(),false,std::make_shared<std::atomic_bool>(false));
+        return update;
+    }));
+}
 void TreeWindow::permissionsKey(QKeyEvent *event)
 {
     const auto key=event->key();const auto mods=event->modifiers();
@@ -131,24 +170,7 @@ void TreeWindow::permissionsKey(QKeyEvent *event)
     }else if(permissionsReview_){
         if(key==Qt::Key_Backspace){permissionsReview_=false;}
         else if(key==Qt::Key_Y || enter){
-            busy_=true;cancel_=std::make_shared<std::atomic_bool>(false);
-            if(permissionsBatch_){
-                const auto targets=permissionsTargets_;const auto modes=permissionsModes_;const auto cancel=cancel_;
-                status_="Changing tagged file permissions…";
-                permissionsBatchWatcher_.setFuture(QtConcurrent::run([targets,modes,cancel]{
-                    PermissionBatchResult batch;
-                    for(int i=0;i<targets.size();++i){
-                        if(cancel->load()){batch.cancelled=true;break;}
-                        auto result=changePermissions(targets[i],modes[i],cancel);
-                        batch.items.append({targets[i],result});
-                        if(result.cancelled){batch.cancelled=true;break;}
-                    }
-                    return batch;
-                }));refresh();return;
-            }
-            const auto before=permissionsBefore_;const auto mode=permissionsMode_;const auto cancel=cancel_;
-            status_="Changing permissions…";
-            permissionsWatcher_.setFuture(QtConcurrent::run([before,mode,cancel]{return changePermissions(before,mode,cancel);}));
+            applyPermissions();
         }
     }else if(enter){
         if(permissionsBatch_){
@@ -162,6 +184,7 @@ void TreeWindow::permissionsKey(QKeyEvent *event)
         }
         if(parsePermissions(permissionsInput_,permissionsBefore_.mode,permissionsBefore_.directory,permissionsMode_,status_)){
             if(permissionsMode_==permissionsBefore_.mode){permissionsPrompt_=false;status_="Permissions already match; no change made";}
+            else if(permissionsBefore_.regular)applyPermissions();
             else permissionsReview_=true;
         }
     }else if(key==Qt::Key_V && ctrl){const auto value=QGuiApplication::clipboard()->text();permissionsInput_.insert(permissionsCursor_,value);permissionsCursor_+=int(value.size());}
@@ -196,7 +219,7 @@ void TreeWindow::drawPermissions(QPainter &p)
             "[Y/Enter] Apply  [N/Esc] Cancel  [Backspace] Edit");
     }else{
         drawInput(p,0,y+1,"Mode ("+permissionOctal(permissionsBefore_.mode)+"): ",permissionsInput_,permissionsCursor_,theme::normal);
-        if(status_.isEmpty())drawCommands(p,0,y+2,"[Enter] Review  [Esc] Cancel  Examples: 755, u+w, go-w, u=rwx,g=rx,o=");
+        if(status_.isEmpty())drawCommands(p,0,y+2,QString("[Enter] %1  [Esc] Cancel  Examples: 755, u+w, go-w, u=rwx,g=rx,o=").arg(!permissionsBatch_ && permissionsBefore_.regular?"Apply":"Review"));
         else drawText(p,0,y+2,status_,theme::labels);
     }
 }

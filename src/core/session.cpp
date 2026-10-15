@@ -195,13 +195,6 @@ void Session::removeFile(const String &path)
     tags.remove(path);visibleSnapshot_.remove(path);rebuild();
 }
 
-void Session::setFileWritable(const String &path, bool writable)
-{
-    const auto parent=directories_.find(FileInfo(path).absolutePath());
-    if(parent==directories_.end())return;
-    for(auto &file:parent->files)if(file.path==path){file.writable=writable;rebuild();return;}
-}
-
 void Session::renamePath(const String &source,const String &target)
 {
     clearCompareFilter();

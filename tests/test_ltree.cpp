@@ -1470,6 +1470,27 @@ while True:
         result=changePermissions(reviewed,0700,cancel);QVERIFY(!result.changed);QVERIFY(result.error.contains("changed type"));
         result=changePermissions(readMetadata(path),0700,cancel);QVERIFY(!result.changed);
     }
+    void filePermissionsApplyOnEnter()
+    {
+        const auto base=root+"/file-permissions-enter";QVERIFY(QDir().mkpath(base));
+        const auto path=base+"/selected.txt";write(path);
+        QVERIFY(::chmod(QFile::encodeName(path).constData(),0600)==0);
+        TreeWindow window(base);window.show();QTRY_VERIFY(!window.busy());
+        QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_T);QTest::keyClick(&window,Qt::Key_Home);
+        const auto tags=window.session().tags;QTest::keyClick(&window,Qt::Key_F8);
+        QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"0644");QTest::keyClick(&window,Qt::Key_Return);
+        QTRY_COMPARE(readMetadata(path).mode,quint32(0644));QTRY_VERIFY(!window.busy());
+        QCOMPARE(window.session().currentFile()->attributes.mode,std::optional<quint32>(0644));
+        QCOMPARE(window.oppositeSession()->currentFile()->attributes.mode,std::optional<quint32>(0644));
+        QCOMPARE(window.session().tags,tags);QCOMPARE(window.session().view,View::Directory);
+        QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"go-r");QTest::keyClick(&window,Qt::Key_Enter);
+        QTRY_COMPARE(readMetadata(path).mode,quint32(0600));QTRY_VERIFY(!window.busy());
+        QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"888");QTest::keyClick(&window,Qt::Key_Return);
+        QVERIFY(window.status().contains("octal"));QCOMPARE(readMetadata(path).mode,quint32(0600));
+        QTest::keyClick(&window,Qt::Key_Escape);
+        QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"0644");QTest::keyClick(&window,Qt::Key_Escape);
+        QCOMPARE(readMetadata(path).mode,quint32(0600));QVERIFY(window.status().contains("cancelled"));
+    }
     void fileAttributesDirectoryBranchShowall()
     {
         const auto base=root+"/file-attributes";QVERIFY(QDir().mkpath(base+"/child"));
@@ -1493,29 +1514,59 @@ while True:
             const auto tags=window.session().tags;const auto index=window.session().fileIndex;
             const auto normal=window.grab().toImage();
             QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"u-w,go-w");
-            capture(window,"file-attributes-input");QTest::keyClick(&window,Qt::Key_Return);capture(window,"file-attributes-review");
-            QCOMPARE(readMetadata(selected).mode,old.mode);QTest::keyClick(&window,Qt::Key_N);
+            capture(window,"file-attributes-input");
+            QCOMPARE(readMetadata(selected).mode,old.mode);QTest::keyClick(&window,Qt::Key_Escape);
             QCOMPARE(readMetadata(selected).mode,old.mode);QCOMPARE(window.grab().toImage().copy(0,0,window.width(),window.height()-80),normal.copy(0,0,window.width(),window.height()-80));
             QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"444");
-            QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_Y);QTRY_VERIFY(!window.busy());
+            QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());
             QVERIFY2(window.status().contains("changed to 0444"),qPrintable(window.status()));
             QCOMPARE(readMetadata(selected).mode,quint32(0444));QCOMPARE(readMetadata(untouched).mode,other.mode);
             QCOMPARE(readMetadata(base).mode,directory.mode);QCOMPARE(readMetadata(selected).modified,old.modified);
             QCOMPARE(window.session().view,view);QCOMPARE(window.session().fileIndex,index);QCOMPARE(window.session().currentFile()->path,selected);
             QCOMPARE(window.session().tags,tags);QVERIFY(window.isSplit());QCOMPARE(window.activeSide(),0);
             QCOMPARE(window.session().currentFile()->writable,::geteuid()==0);
+            QCOMPARE(window.session().currentFile()->attributes.mode,std::optional<quint32>(0444));
+            QCOMPARE(window.oppositeSession()->files()[index].attributes.mode,std::optional<quint32>(0444));
             QCOMPARE(window.oppositeSession()->files()[index].writable,::geteuid()==0);
             QTest::keyClick(&window,Qt::Key_I,Qt::AltModifier);QTest::keyClick(&window,Qt::Key_A);
             QTest::keyClicks(&window,"a+X");QTest::keyClick(&window,Qt::Key_Return);
             QVERIFY(window.status().contains("already match"));QCOMPARE(readMetadata(selected).mode,quint32(0444));
             QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"u+w");QTest::keyClick(&window,Qt::Key_Return);
-            QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());QCOMPARE(readMetadata(selected).mode,quint32(0644));
+            QTRY_VERIFY(!window.busy());QCOMPARE(readMetadata(selected).mode,quint32(0644));
+            QCOMPARE(window.session().currentFile()->attributes.mode,std::optional<quint32>(0644));
             capture(window,"file-attributes-info");QTest::keyClick(&window,Qt::Key_Escape);
             QCOMPARE(window.session().currentFile()->path,selected);QVERIFY(window.session().currentFile()->writable);
             const auto directoryMode=readMetadata(base).mode;
             QTest::keyClick(&window,Qt::Key_A,Qt::ControlModifier);QTest::keyClick(&window,Qt::Key_Escape);QVERIFY(window.status().contains("cancelled"));
             QCOMPARE(readMetadata(base).mode,directoryMode);QCOMPARE(readMetadata(selected).mode,quint32(0644));
         }
+    }
+    void taggedPermissionsRefreshBothPanes()
+    {
+        const auto base=root+"/tagged-permissions-refresh";QVERIFY(QDir().mkpath(base+"/child"));
+        write(base+"/a.txt");write(base+"/child/b.txt");write(base+"/untagged.txt");
+        for(const auto &path:QStringList{base+"/a.txt",base+"/child/b.txt",base+"/untagged.txt"})
+            QVERIFY(::chmod(QFile::encodeName(path).constData(),0644)==0);
+        TreeWindow window(base);window.show();QTRY_VERIFY(!window.busy());
+        window.load(true,true);QTRY_VERIFY(!window.busy());QTest::keyClick(&window,Qt::Key_B);
+        QTest::keyClick(&window,Qt::Key_T);QTest::keyClick(&window,Qt::Key_T);
+        QCOMPARE(window.session().tags.size(),2);QTest::keyClick(&window,Qt::Key_Home);
+        QTest::keyClick(&window,Qt::Key_F8);const auto tags=window.session().tags;
+        const auto selected=window.session().currentFile()->path;
+        QTest::keyClick(&window,Qt::Key_A,Qt::ControlModifier);QTest::keyClicks(&window,"640");
+        QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_Y);QTRY_VERIFY(!window.busy());
+        QVERIFY2(window.status().contains("2/2 changed"),qPrintable(window.status()));
+        for(const auto *session:{&window.session(),window.oppositeSession()}){
+            QCOMPARE(session->view,View::Branch);QCOMPARE(session->tags,tags);
+            QCOMPARE(session->currentFile()->path,selected);
+            for(const auto &file:session->files()){
+                const quint32 expected=tags.contains(file.path)?0640:0644;
+                QCOMPARE(readMetadata(file.path).mode,expected);
+                QCOMPARE(file.attributes.mode,std::optional<quint32>(expected));
+                QCOMPARE(fileAttributeText(file.attributes,false),permissionText(expected)+" .");
+            }
+        }
+        capture(window,"tagged-permissions-refreshed");
     }
     void fileAttributesErrorsAndCompactPrompt()
     {
@@ -1525,13 +1576,13 @@ while True:
         QTest::qWait(250);window.resize(640,400);QTest::qWait(100);QTRY_COMPARE(window.columns(),80);
         QTest::keyClick(&window,Qt::Key_Return);QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"888");
         QTest::keyClick(&window,Qt::Key_Return);QVERIFY(window.status().contains("octal"));QTest::keyClick(&window,Qt::Key_A,Qt::ControlModifier);
-        QTest::keyClicks(&window,"400");QTest::keyClick(&window,Qt::Key_Return);capture(window,"file-attributes-review-80");
+        QTest::keyClicks(&window,"400");capture(window,"file-attributes-input-80");
         QTest::keyClick(&window,Qt::Key_Escape);const auto mode=readMetadata(base+"/current.php").mode;
         QTest::keyClick(&window,Qt::Key_Down);QCOMPARE(window.session().currentFile()->name,QString("link.php"));
         QTest::keyClick(&window,Qt::Key_A);QVERIFY(window.status().contains("symbolic links"));
         QCOMPARE(readMetadata(base+"/current.php").mode,mode);
         QTest::keyClick(&window,Qt::Key_Up);QTest::keyClick(&window,Qt::Key_A);QTest::keyClicks(&window,"400");
-        QTest::keyClick(&window,Qt::Key_Return);QVERIFY(::chmod(QFile::encodeName(base+"/current.php").constData(),0600)==0);
+        QVERIFY(::chmod(QFile::encodeName(base+"/current.php").constData(),0600)==0);
         QTest::keyClick(&window,Qt::Key_Return);QTRY_VERIFY(!window.busy());QVERIFY(window.status().contains("changed since review"));
         QCOMPARE(readMetadata(base+"/current.php").mode,quint32(0600));
         QVERIFY(QFile::remove(base+"/current.php"));QVERIFY(QDir().mkdir(base+"/current.php"));

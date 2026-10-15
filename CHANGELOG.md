@@ -9,6 +9,14 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Apply file permissions with Enter — 2026-10-14
+
+- In both interfaces, A in a file list applies a valid permission mode with Enter and refreshes the displayed attributes. Esc cancels before submitting. Tagged-file and directory permission changes retain their review.
+
+### Permission refresh — 2026-10-14
+
+- Graphical A and Ctrl+A reread affected directories after applying permissions and refresh both panes and saved sessions without manual relogging. Selection, tags and the current list view are retained. Terminal permission changes retain their automatic refresh.
+
 ### Directory link navigation — 2026-10-14
 
 - Both interfaces label directory symbolic links with their target and open the real directory with Enter or +, retaining the original tree branch. Recursive logging skips links; broken/circular targets report an error.

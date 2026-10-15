@@ -2,6 +2,15 @@ import runpy,json,os,zipfile,gzip,bz2,lzma,time
 from pathlib import Path
 h=runpy.run_path(str(Path(__file__).with_name('terminal_pty.py')),run_name='harness');App=h['App'];F1=h['F1'];F3=h['F3'];F4=h['F4'];F5=h['F5'];F10=h['F10'];UP=h['UP'];DOWN=h['DOWN'];END=h['END'];HOME=h['HOME'];work=h['work'];checks=h['checks'];a=None
 try:
+ a=App('permissions-refresh',{'a.txt':b'one','b.txt':b'two'})
+ for path in a.root.iterdir():path.chmod(0o644)
+ a.send(F3);a.send('\r');a.send(h['F8']);a.send('a');a.send('0644');a.send('\x1b');a.check('A Escape cancels before Enter',(a.root/'a.txt').stat().st_mode&0o7777==0o644);a.send('a');a.send('888\r');a.wait('octal');a.send('\x15'+'640\r');a.wait('Permissions completed')
+ a.check('A immediately refreshes permission column','rw-r-----' in a.screen.text() and (a.root/'a.txt').stat().st_mode&0o7777==0o640)
+ a.send('\t');a.check('A refreshes opposite pane permissions','rw-r-----' in a.screen.text());a.send('\t')
+ a.send('a');a.send('0644\r');a.wait('Permissions completed');a.check('A applies 0644 with one Enter',(a.root/'a.txt').stat().st_mode&0o7777==0o644 and a.screen.text().count('rw-r--r--')==4)
+ a.send('\x14');a.send('\x01');a.send('600\r');a.check('Ctrl+A still waits for confirmation',all(path.stat().st_mode&0o7777==0o644 for path in a.root.iterdir()));a.send('y');a.wait('2/2 changed')
+ a.check('Ctrl+A immediately refreshes every tagged permission',a.screen.text().count('rw-------')==4 and all(path.stat().st_mode&0o7777==0o600 for path in a.root.iterdir()))
+ a.close()
  a=App('formats',{'source.txt':b'format payload\n'})
  a.send('\r')
  for extension in ['zip','tar','tar.gz','tar.bz2','tar.xz','7z','gz','bz2','xz']:

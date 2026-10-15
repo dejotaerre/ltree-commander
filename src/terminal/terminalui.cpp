@@ -678,7 +678,7 @@ class TerminalUI {
         else if (stamping_) {
             commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel [F2] Now [F4] " + StringList{"Written", "Accessed", "Both"}[int(stampField_)] +
                 " [F5] Mode [Tab] Current [F3/↑] Last");
-        } else commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel  Examples: 755, u+w, go-w");
+        } else commands(0, rows_ - 1, String("[Enter] ") + (!metadataTagged_ && target.regular ? "Apply" : "Review") + " [Esc] Cancel  Examples: 755, u+w, go-w");
         wmove(stdscr, rows_ - 2, int(label.size()) + cursor_ - first);curs_set(2);
     }
     void reviewMetadata()
@@ -694,6 +694,7 @@ class TerminalUI {
                 permissionModes_.append(mode);
             }
         }
+        if (!stamping_ && !metadataTagged_ && metadataTargets_.first().regular) { applyMetadata();return; }
         prompt_ = Prompt::MetadataReview;inputSelected_ = false;
     }
     void applyMetadata()
