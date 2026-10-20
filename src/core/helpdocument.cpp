@@ -456,6 +456,8 @@ Alt+G in the tree opens GRAFT. The destination is a containing directory: its ne
 
 Existing destination branches are never replaced or merged. On the same filesystem, the branch is renamed. Across filesystems, GNU mv copies it before removing the source.
 
+The running display shows the current file and destination, copied bytes, percentage, a progress bar, speed, elapsed time and estimated time remaining. The spinner continues while waiting for the filesystem. Preparation counts regular-file bytes once without following symbolic links or double-counting hard links. Transfer updates come from the local mv process rather than repeated scans of the remote destination. Same-filesystem moves show their rename stage. Esc requests a stop; a blocked filesystem call must return before cleanup can finish.
+
 Symbolic links inside the branch move as links; their targets are not followed. Source branches containing mount points are rejected.
 
 An interrupted cross-filesystem move may retain a destination copy. Warnings and recovery paths are reported. Retained copies are not automatically removed. Check the result before using either branch again.

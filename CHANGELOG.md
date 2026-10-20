@@ -9,6 +9,18 @@
 
 First functional alpha of LTree Commander for Linux.
 
+### Terminal prompt stability — 2026-10-20
+
+- Compose input prompts and shared modal overlays together with their background before refreshing the terminal. Keep the cursor visible while editing instead of repeatedly hiding and showing it, preventing background flashes and prompt flicker over SSH.
+
+### Incremental name search — 2026-10-20
+
+- Terminal Shift+letters and digits retain the whole name prefix across keystrokes in tree and file lists. Shift+Backspace edits it, Shift+Esc clears it, quotes find the next match, and navigation starts a fresh prefix. Graphical held-Shift behavior is covered by the same regression scenarios.
+
+### Graft progress — 2026-10-17
+
+- Graphical and terminal Graft show the current file and destination, a progress bar, transferred bytes, speed, elapsed time and estimated time remaining, while retaining the spinner and Esc stop. Cross-filesystem transfers keep GNU mv and read progress from its local process; preparation counts regular-file bytes once without following links or double-counting hard links. Same-filesystem moves display their rename stage.
+
 ### Apply file permissions with Enter — 2026-10-14
 
 - In both interfaces, A in a file list applies a valid permission mode with Enter and refreshes the displayed attributes. Esc cancels before submitting. Tagged-file and directory permission changes retain their review.

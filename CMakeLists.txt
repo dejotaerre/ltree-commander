@@ -101,6 +101,8 @@ include(CTest)
 if(BUILD_TESTING)
     add_library(ltree-transfer-delay SHARED tests/transfer_delay.cpp)
     target_link_libraries(ltree-transfer-delay PRIVATE dl pthread)
+    add_library(ltree-graft-delay SHARED tests/graft_delay.cpp)
+    target_link_libraries(ltree-graft-delay PRIVATE dl pthread)
     add_executable(ltree-platform-tests tests/test_platform.cpp)
     target_link_libraries(ltree-platform-tests PRIVATE ltree_core)
     add_test(NAME ltree-platform-tests COMMAND ltree-platform-tests)
@@ -114,6 +116,11 @@ if(BUILD_TESTING)
             "LTC_TRANSFER_TEST_DELAY_LIBRARY=$<TARGET_FILE:ltree-transfer-delay>"
             ${LTREE_TEST_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/transfer_progress_pty.py)
         set_tests_properties(ltree-transfer-terminal-progress PROPERTIES TIMEOUT 90)
+        add_test(NAME ltree-graft-terminal-progress COMMAND ${CMAKE_COMMAND} -E env
+            "LTC_TEST_BINARY=$<TARGET_FILE:ltc>" "LTREE_PTY_WORK="
+            "LTC_GRAFT_TEST_DELAY_LIBRARY=$<TARGET_FILE:ltree-graft-delay>"
+            ${LTREE_TEST_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/graft_progress_pty.py)
+        set_tests_properties(ltree-graft-terminal-progress PROPERTIES TIMEOUT 60)
     endif()
     if(LTREE_BUILD_GUI)
         find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -164,6 +171,11 @@ if(BUILD_TESTING)
             "LD_PRELOAD=$<TARGET_FILE:ltree-transfer-delay>"
             $<TARGET_FILE:ltree-tests> transferProgressSpinnerAndCancellation)
         set_tests_properties(ltree-transfer-progress PROPERTIES TIMEOUT 60)
+        add_test(NAME ltree-graft-progress COMMAND ${CMAKE_COMMAND} -E env
+            "LTREE_GRAFT_TEST_DELAY=1" "QT_QPA_PLATFORM=offscreen"
+            "LD_PRELOAD=$<TARGET_FILE:ltree-graft-delay>"
+            $<TARGET_FILE:ltree-tests> graftProgressSpinnerAndCancellation graftProgressEngineDetails)
+        set_tests_properties(ltree-graft-progress PROPERTIES TIMEOUT 60)
         add_test(NAME ltree-tests COMMAND ltree-tests)
         set_tests_properties(ltree-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()

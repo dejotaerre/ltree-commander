@@ -382,8 +382,21 @@ void graftCommand() {
   auto target = readMetadata(absolute(*dest));
   if (!confirm("Move branch " + source.path + " to " + target.path + "?"))
     return;
+  const auto progress=std::make_shared<GraftProgress>();progress->setPath(source.path);
+  const auto destinationPath=DirectoryPath(target.path).filePath(FileInfo(source.path).fileName());
+  ElapsedTimer elapsed;elapsed.start();
   auto result = task("Moving branch", [=](const Cancellation &cancel) {
-    return graftBranch(source, target, cancel);
+    return graftBranch(source, target, cancel, {}, progress.get());
+  },[&]{
+    for(int y=rows_-3;y<rows_;++y)fill(0,y,columns_,1);
+    const auto current=progress->path();
+    text(0,rows_-3,"GRAFT: "+pathLabel(current,std::max(1,columns_-7)),1);
+    text(0,rows_-2,"To: "+pathLabel(destinationPath+(isWithin(current,source.path)?current.mid(source.path.size()):String{}),std::max(1,columns_-4)),2);
+    const auto &transfer=progress->transfer;const int barWidth=std::clamp(columns_/8,4,24);
+    text(0,rows_-1,String("|/-\\").mid(spinner_++%4,1),1,1);
+    text(2,rows_-1,String(barWidth*transferPercent(transfer)/100,Char(0x2588)).leftJustified(barWidth),1,barWidth);
+    text(barWidth+3,rows_-1,transferMetrics(transfer,elapsed.elapsed(),columns_<120),1,columns_-barWidth-15);
+    commands(columns_-12,rows_-1,cancel_->load()?"Stopping...":"[Esc] Stop");
   });
   if (result.moved) {
     active_.session.graftPath(result.source, result.target);
@@ -392,8 +405,15 @@ void graftCommand() {
     applyScan(result.scan);
     refreshDirectories({FileInfo(source.path).absolutePath(), target.path});
     status_ = "Branch moved";
-  } else
-    status_ = result.error;
+  } else {
+    if(!result.recoverySource.isEmpty()){
+      active_.session.graftPath(result.source,result.recoverySource);
+      if(other_)other_->session.graftPath(result.source,result.recoverySource);
+    }
+    applyScan(result.scan);
+    status_ = result.cancelled ? "Graft cancelled" : result.error;
+    if(result.cancelled && !result.error.isEmpty())status_+="; "+result.error;
+  }
 }
 void pruneCommand() {
   PruneOptions options;

@@ -74,7 +74,7 @@ void TreeWindow::connectGraft()
 
 void TreeWindow::beginGraft()
 {
-    stopAutoview();infoVisible_ = false;activeSpell_ = false;
+    stopAutoview();infoVisible_ = false;activeSpell_ = false;graftProgress_.reset();
     graftSource_ = readMetadata(session_.directory);
     if (graftSource_.symlink) { status_ = "Graft does not move a symbolic link's target; select the real directory to move it";return; }
     if (!graftSource_.error.isEmpty() || !graftSource_.directory || graftSource_.symlink || graftSource_.path == "/") {
@@ -123,8 +123,11 @@ void TreeWindow::graftKey(QKeyEvent *event)
         if (key == Qt::Key_F2) { graftBrowseTop_ = 0;startGraftBrowse(path);return; }
         rememberHistory(graftHistory_, path);
         const auto source = graftSource_;cancel_ = std::make_shared<std::atomic_bool>(false);const auto cancel = cancel_;
+        graftProgress_=std::make_shared<GraftProgress>();graftProgress_->setPath(source.path);
+        const auto progress=graftProgress_;
+        graftDestination_=QDir(destination.path).filePath(QFileInfo(source.path).fileName());graftElapsed_.start();
         busy_ = true;status_ = "Moving branch…";graftTimer_.start();
-        graftWatcher_.setFuture(QtConcurrent::run([source, destination, cancel] { return graftBranch(source, destination, cancel); }));
+        graftWatcher_.setFuture(QtConcurrent::run([source, destination, cancel, progress] { return graftBranch(source, destination, cancel, {}, progress.get()); }));
     } else if (key == Qt::Key_Tab || key == Qt::Key_Backtab) {
         const bool reverse = key == Qt::Key_Backtab || mods.testFlag(Qt::ShiftModifier);
         graftPathIndex_ = graftPathIndex_ < 0 ? (reverse ? int(graftPaths_.size()) - 1 : 0) :
@@ -198,6 +201,23 @@ void TreeWindow::drawGraft(QPainter &p)
 {
     if(graftHelp_){drawHelp(p);return;}
     const int y = bottom() + 1;
+    if(busy_ && graftProgress_){
+        const auto current=graftProgress_->path();
+        const auto pathLine=[&](int row,const QString &label,const QString &path){
+            const int room=std::max(4,columns_-int(label.size()));
+            drawText(p,0,row,label+(path.size()>room?"..."+path.right(room-3):path),theme::labels);
+        };
+        pathLine(y,"GRAFT: ",current.isEmpty()?graftSource_.path:current);
+        pathLine(y+1,"To: ",graftDestination_+(isWithin(current,graftSource_.path)?current.mid(graftSource_.path.size()):QString{}));
+        const auto &transfer=graftProgress_->transfer;
+        const int barWidth=std::clamp(columns_/8,4,24);
+        drawText(p,0,y+2,QString("|/-\\").mid(graftSpinner_%4,1),theme::labels,1);
+        p.fillRect(2*cellWidth_,(y+2)*cellHeight_+cellHeight_/3,
+            barWidth*cellWidth_*transferPercent(transfer)/100,std::max(2,cellHeight_/3),theme::labels);
+        drawText(p,barWidth+3,y+2,transferMetrics(transfer,graftElapsed_.elapsed(),columns_<120),theme::labels,columns_-barWidth-15);
+        drawCommands(p,columns_-12,y+2,cancel_->load()?"Stopping...":"[Esc] Stop",12);
+        return;
+    }
     drawText(p, 0, y, "GRAFT branch: " + graftSource_.path, theme::labels);
     drawInput(p, 0, y + 1, "         to: ", graftInput_, graftCursor_, theme::normal);
     if (graftSelected_ && !busy_) {

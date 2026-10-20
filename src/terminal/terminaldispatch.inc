@@ -6,12 +6,18 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
   auto &s = active_.session;
   bool tree = s.view == View::Tree;
   int letter = value >= 'A' && value <= 'Z' ? value + 32 : value;
+  const bool spelling = literal && !alt && !control &&
+      ((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'));
+  if (!spelling && value != 0x2604 && value != 0x2605 && value != '"')
+    activeSpell_ = false;
   if (value == 0x2604 || value == 0x2605) {
-    auto spell = tree ? s.treeSpell : s.fileSpell;
+    auto &spell = tree ? s.treeSpell : s.fileSpell;
     if (value == 0x2604)
       spell.chop(1);
-    else
+    else {
       spell.clear();
+      activeSpell_ = false;
+    }
     s.spell(spell);
     return true;
   }
@@ -37,9 +43,10 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
     forwardPreviewKey(value == 0x220a ? KEY_F(10) : value + 32, false, literal);
     return true;
   }
-  if (literal && !alt && !control &&
-      ((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'))) {
-    auto spell = tree ? s.treeSpell : s.fileSpell;
+  if (spelling) {
+    auto &spell = tree ? s.treeSpell : s.fileSpell;
+    if (!activeSpell_) spell.clear();
+    activeSpell_ = true;
     const char32_t cp = value;
     spell += String::fromUcs4(&cp, 1);
     if (!s.spell(spell))
@@ -288,21 +295,6 @@ bool extendedKey(int value, bool alt, bool control, bool literal) {
       } else
         status_ = error;
     }
-    return true;
-  }
-  if (literal && !alt && !control &&
-      ((value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9'))) {
-    auto spell = tree ? s.treeSpell : s.fileSpell;
-    const char32_t cp = value;
-    spell += String::fromUcs4(&cp, 1);
-    if (!s.spell(spell))
-      status_ = "No match";
-    return true;
-  }
-  if (value == '"') {
-    auto spell = tree ? s.treeSpell : s.fileSpell;
-    if (!s.spell(spell, true))
-      status_ = "No more matches";
     return true;
   }
   return false;

@@ -748,6 +748,7 @@ class Process {
     bool waitForStarted(int timeout = 30000);
     bool waitForFinished(int timeout = 30000);
     State state() const;
+    int64 processId() const;
     ExitStatus exitStatus() const;
     int exitCode() const;
     ProcessError error() const;

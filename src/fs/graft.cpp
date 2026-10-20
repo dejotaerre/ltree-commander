@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <cerrno>
 #include <cstring>
+#include <dirent.h>
+#include <limits>
+#include <set>
 
 namespace ltree {
 namespace {
@@ -31,11 +34,68 @@ bool matches(const struct stat &value, const FileMetadata &expected)
         value.st_ctim.tv_sec == expected.changedSeconds && value.st_ctim.tv_nsec == expected.changedNanoseconds;
 }
 String systemError() { return String::fromLocal8Bit(std::strerror(errno)); }
+
+int64 branchBytes(int fd, const String &path, const Cancellation &cancel, GraftProgress &details,
+                  std::set<std::pair<dev_t,ino_t>> &seen)
+{
+    DIR *directory=::fdopendir(fd);
+    if(!directory){::close(fd);return -1;}
+    int64 total=0;
+    details.setPath(path);
+    while(!cancel->load()){
+        errno=0;const auto *entry=::readdir(directory);
+        if(!entry){if(errno)total=-1;break;}
+        if(!std::strcmp(entry->d_name,".") || !std::strcmp(entry->d_name,".."))continue;
+        struct stat value{};
+        if(::fstatat(::dirfd(directory),entry->d_name,&value,AT_SYMLINK_NOFOLLOW)!=0){total=-1;break;}
+        int64 size=0;
+        if(S_ISDIR(value.st_mode)){
+            const int child=::openat(::dirfd(directory),entry->d_name,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+            if(child<0){total=-1;break;}
+            size=branchBytes(child,path+'/'+File::decodeName(entry->d_name),cancel,details,seen);
+        }else if(S_ISREG(value.st_mode) && (value.st_nlink<=1 || seen.insert({value.st_dev,value.st_ino}).second))size=value.st_size;
+        if(size<0 || size>std::numeric_limits<int64>::max()-total){total=-1;break;}
+        total+=size;
+    }
+    ::closedir(directory);
+    return total;
+}
+
+void processProgress(int64 pid, const String &source, const String &target, int64 total, GraftProgress &details)
+{
+    if(pid<=0)return;
+    const String proc=String("/proc/%1/").arg(pid);
+    File io(proc+"io");
+    if(io.open(IO::ReadOnly))for(const auto &line:String::fromLatin1(io.readAll()).split('\n'))if(line.startsWith("wchar:")){
+        bool ok=false;const auto bytes=line.mid(6).trimmed().toLongLong(&ok);
+        if(ok)details.transfer.report(bytes,total,TransferPhase::Copying);
+        break;
+    }
+    // Consultar descriptores del proceso evita recorrer el destino de red en cada actualización.
+    const auto fdPath=File::encodeName(proc+"fd");DIR *fds=::opendir(fdPath.constData());
+    if(!fds)return;
+    while(const auto *entry=::readdir(fds)){
+        if(entry->d_name[0]=='.')continue;
+        const String descriptor=File::decodeName(entry->d_name);
+        File info(proc+"fdinfo/"+descriptor);bool writable=false;
+        if(info.open(IO::ReadOnly))for(const auto &line:String::fromLatin1(info.readAll()).split('\n'))if(line.startsWith("flags:")){
+            writable=(line.mid(6).trimmed().toLongLong(nullptr,8)&O_ACCMODE)!=O_RDONLY;break;
+        }
+        if(!writable)continue;
+        char buffer[4096];const auto link=File::encodeName(proc+"fd/"+descriptor);
+        const auto length=::readlink(link.constData(),buffer,sizeof(buffer));
+        if(length<=0 || length==ssize_t(sizeof(buffer)))continue;
+        const String path=File::decodeName(Bytes(buffer,int(length)));
+        if(path.startsWith(target+'/')){details.setPath(source+path.mid(target.size()));break;}
+    }
+    ::closedir(fds);
+}
 }
 GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destination,
-                        const Cancellation &cancel, const std::function<void(const String &)> &progress)
+                        const Cancellation &cancel, const std::function<void(const String &)> &progress, GraftProgress *details)
 {
     GraftResult result;result.source = source.path;
+    if(details){details->setPath(source.path);details->transfer.report(0,-1,TransferPhase::Preparing);}
     if (cancel->load()) { result.cancelled = true;return result; }
     for (const auto &item : {source, destination}) {
         if (!item.error.isEmpty() || !item.directory || item.symlink || !DirectoryPath::isAbsolutePath(item.path) ||
@@ -77,13 +137,22 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
     else if (cancel->load()) result.cancelled = true;
     else {
         if (progress) progress(source.path);
+        if(details)details->transfer.report(0,-1,TransferPhase::Moving);
         if (!cancel->load() && ::syscall(SYS_renameat2, parent.fd, held.constData(), target.fd, name.constData(), RENAME_NOREPLACE) == 0)
             result.moved = true;
         else if (cancel->load()) result.cancelled = true;
         else if (errno == EXDEV) {
             result.crossDevice = true;
+            int64 total=-1;
+            if(details){
+                details->transfer.report(0,-1,TransferPhase::Preparing);
+                const int directory=::openat(parent.fd,held.constData(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+                if(directory>=0){std::set<std::pair<dev_t,ino_t>> seen;total=branchBytes(directory,source.path,cancel,*details,seen);}
+                details->setPath(source.path);details->transfer.report(0,total,TransferPhase::Copying);
+            }
             const auto executable = Paths::findExecutable("mv");
-            if (executable.isEmpty()) result.error = "GNU mv is required for Graft across filesystems";
+            if(cancel->load())result.cancelled=true;
+            else if (executable.isEmpty()) result.error = "GNU mv is required for Graft across filesystems";
             else {
                 // Los descriptores heredados fijan los padres; no se ejecuta un shell.
                 Process process;auto env = ProcessEnvironment::systemEnvironment();env.insert("LC_ALL", "C");
@@ -101,6 +170,7 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
                     // Una operación entre volúmenes termina antes de devolver el control al modelo.
                     while (process.state() != Process::NotRunning) {
                         process.waitForFinished(50);
+                        if(details)processProgress(process.processId(),source.path,result.target,total,*details);
                         diagnostics += process.readAllStandardError();diagnostics = diagnostics.left(65536);process.readAllStandardOutput();
                         if (cancel->load()) {
                             result.cancelled = true;process.terminate();
@@ -126,15 +196,18 @@ GraftResult graftBranch(const FileMetadata &source, const FileMetadata &destinat
             result.error += "; source retained at " + result.recoverySource;
         }
     } else {
+        if(details)details->transfer.phase.store(TransferPhase::Syncing);
         if (::fsync(parent.fd) != 0 || ::fsync(target.fd) != 0) result.error += "; moved, but directory synchronization failed";
     }
     if (cancel->load()) result.cancelled = true;
     const auto refreshCancel = std::make_shared<std::atomic_bool>(false);
+    if(details)details->transfer.phase.store(TransferPhase::Refreshing);
     result.scan = scanDirectories(parentPath, false, refreshCancel);
     result.scan.directories += scanDirectories(destination.path, false, refreshCancel).directories;
     // Un fallo durante la retirada entre volúmenes puede dejar un origen parcial.
     if (result.crossDevice && !result.moved && result.recoverySource.isEmpty())
         result.scan.directories += scanDirectories(source.path, true, refreshCancel).directories;
+    if(details && result.moved)details->transfer.phase.store(TransferPhase::Completed);
     return result;
 }
 }

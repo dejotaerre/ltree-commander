@@ -1400,6 +1400,7 @@ Process::State Process::state() const {
     data_->update();
     return data_->pid > 0 && !data_->done ? Running : NotRunning;
 }
+int64 Process::processId() const { return state() == NotRunning ? 0 : data_->pid; }
 Process::ExitStatus Process::exitStatus() const {
     return WIFSIGNALED(data_->status) ? CrashExit : NormalExit;
 }

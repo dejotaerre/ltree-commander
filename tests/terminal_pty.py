@@ -217,9 +217,41 @@ def directory_links():
   a.send('d');a.wait('target kept');a.send('y');a.wait('Symbolic link deleted');a.check('Delete removes link and keeps target contents',not (a.root/'renamed-link').is_symlink() and (target/'payload.txt').read_bytes()==b'KEEP')
  finally:a.close()
 
+def incremental_spell(kitty=False):
+ a=App('incremental-spell'+('-kitty' if kitty else ''),{'aejemplo/file':b'a','avenida/file':b'av','avion/file':b'air','var/file':b'v','aejemplo.txt':b'first','avenida.txt':b'avenida-content','avion.txt':b'avion-content','var.txt':b'var-content'})
+ try:
+  def selected():return a.screen.text().splitlines()[0].strip()
+  def spell(text):
+   a.send(''.join('\x1b['+str(ord(c.lower()))+';2:1;'+str(ord(c))+'u' for c in text) if kitty else text)
+  if kitty:a.send('\x1b[?0u\x1b[?1;2c');a.send('\x1b[57441;2u')
+  spell('A');a.check('Spell A selects first matching directory',selected()==str(a.root/'aejemplo'))
+  spell('V');a.check('Spell AV retains A instead of jumping to var',selected()==str(a.root/'avenida'))
+  spell('Z');a.check('Unmatched prefix keeps selection and reports no match',selected()==str(a.root/'avenida') and 'No match' in a.screen.text())
+  a.send('\x1b[127;2u');spell('I');a.check('Shift Backspace edits retained prefix',selected()==str(a.root/'avion'))
+  a.send('\x1b[27;2u');spell('V');a.check('Shift Escape starts a fresh prefix',selected()==str(a.root/'var'))
+  a.send(HOME);spell('A');spell('V');a.send('"');a.check('Quote advances to next AV match',selected()==str(a.root/'avion'))
+  a.send(HOME);spell('V');a.check('Navigation starts a fresh prefix',selected()==str(a.root/'var'))
+  a.send(HOME);a.send('\r');a.wait('DIR:');spell('A');spell('V');a.send('v');a.wait('VIEW:');a.check('File-list spell also retains AV','avenida-content' in a.screen.text());a.send('\x1b')
+ finally:a.close()
+
+def prompt_redraw():
+ a=App('prompt-redraw',{'sample.php':b'needle','other.txt':b'other'})
+ try:
+  def stable(label):
+   a.read(.2);footer='\n'.join(a.screen.text().splitlines()[-3:]);start=len(a.transcript);a.read(.45);idle=bytes(a.transcript[start:])
+   a.check(label+' stays visible while idle',b'\x1b[?25l' not in idle and '\n'.join(a.screen.text().splitlines()[-3:])==footer)
+  a.send(F8);a.send('f');a.wait('FILESPEC:');a.send('\x15*.php');a.check('Filespec text remains fully readable','FILESPEC: *.php' in a.screen.text());stable('Split Filespec prompt')
+  a.send('\x1bOD');a.send('x');a.check('Prompt still supports editing in place','FILESPEC: *.phxp' in a.screen.text());stable('Edited Filespec prompt')
+  a.send('\x1b');a.send(F8);a.send('\r');a.wait('DIR:');a.send('r');a.wait('RENAME');stable('Rename prompt');a.send('\x1b')
+  a.send('a');a.send('0644');a.check('Permission mode remains visible','0644' in a.screen.text());stable('Permissions prompt');a.send('\x1b')
+ finally:a.close()
+
 def main():
  a=None
  try:
+  prompt_redraw()
+  incremental_spell()
+  incremental_spell(kitty=True)
   directory_links()
   startup_tree_context()
   rename_clipboard()

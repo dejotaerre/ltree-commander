@@ -440,6 +440,53 @@ while True:
         QFile second(result.target+"/second");QVERIFY(second.open(QIODevice::ReadOnly));QCOMPARE(second.readAll(),QByteArray("SECOND"));
         bool loaded=false;for(const auto &dir:result.scan.directories)if(dir.path==source.path){loaded=true;QCOMPARE(dir.files.size(),1);}QVERIFY(loaded);
     }
+    void graftProgressEngineDetails()
+    {
+        if(!qEnvironmentVariableIsSet("LTREE_GRAFT_TEST_DELAY"))QSKIP("Run with the isolated slow-graft fixture");
+        QTemporaryDir destination("/dev/shm/ltc-graft-progress-XXXXXX");QVERIFY(destination.isValid());
+        const auto source=root+"/graft-progress-engine";QVERIFY(QDir().mkpath(source+"/sub"));
+        const QByteArray payload(4*1024*1024,'x');write(source+"/a.bin",payload);write(source+"/sub/b.bin",payload);
+        QVERIFY(::link(QFile::encodeName(source+"/a.bin").constData(),QFile::encodeName(source+"/hard.bin").constData())==0);
+        GraftProgress progress;const auto cancel=std::make_shared<std::atomic_bool>(false);
+        const auto from=readMetadata(source),to=readMetadata(destination.path());QVERIFY(from.device!=to.device);
+        auto future=QtConcurrent::run([&]{return graftBranch(from,to,cancel,{},&progress);});
+        const auto cleanup=qScopeGuard([&]{cancel->store(true);future.waitForFinished();});
+        QTRY_VERIFY(progress.transfer.bytes.load()>0 && progress.transfer.bytes.load()<payload.size()*2);
+        QCOMPARE(progress.transfer.total.load(),qint64(payload.size()*2));
+        QVERIFY(progress.path().startsWith(source+'/'));QVERIFY(progress.path().endsWith(".bin"));
+        QVERIFY(transferMetrics(progress.transfer,500).contains("MiB/s"));QVERIFY(transferPercent(progress.transfer)<100);
+        const auto before=progress.transfer.bytes.load();QTest::qWait(100);QVERIFY(progress.transfer.bytes.load()>before);
+        QSet<QString> visited;QElapsedTimer elapsed;elapsed.start();
+        while(!future.isFinished() && elapsed.elapsed()<10000){visited.insert(progress.path());QTest::qWait(20);}
+        QVERIFY(future.isFinished());QVERIFY(visited.size()>=2);const auto result=future.result();
+        QVERIFY2(result.moved,qPrintable(result.error));QCOMPARE(transferPercent(progress.transfer),100);
+        QCOMPARE(readMetadata(result.target+"/a.bin").inode,readMetadata(result.target+"/hard.bin").inode);
+    }
+    void graftProgressSpinnerAndCancellation()
+    {
+        if(!qEnvironmentVariableIsSet("LTREE_GRAFT_TEST_DELAY"))QSKIP("Run with the isolated slow-graft fixture");
+        for(const bool cancel:{false,true}){
+            QTemporaryDir source(root+"/graft-progress-XXXXXX"),destination("/dev/shm/ltc-graft-progress-XXXXXX");
+            QVERIFY(source.isValid());QVERIFY(destination.isValid());
+            const QByteArray payload(8*1024*1024,'g');write(source.path()+"/large.bin",payload);
+            const auto target=destination.path()+'/'+QFileInfo(source.path()).fileName()+"/large.bin";
+            TreeWindow window(source.path());window.resize(640,400);window.show();QTRY_VERIFY(!window.busy());
+            QTest::keyClick(&window,Qt::Key_G,Qt::AltModifier);QTest::keyClicks(&window,destination.path());QTest::keyClick(&window,Qt::Key_Return);
+            QTRY_VERIFY(QFileInfo(target).size()>0 && QFileInfo(target).size()<payload.size());QTest::qWait(110);QVERIFY(window.busy());
+            const auto spinner=window.grab(QRect(0,(window.rows()-2)*16,8,16)).toImage();
+            QTest::qWait(110);QVERIFY(window.grab(QRect(0,(window.rows()-2)*16,8,16)).toImage()!=spinner);
+            const auto image=window.grab().toImage();bool advanced=false;
+            for(int x=16;x<96;++x)if(image.pixelColor(x,(window.rows()-2)*16+6)==QColor(0,255,255))advanced=true;
+            QVERIFY(advanced);capture(window,cancel?"graft-progress-cancel-80":"graft-progress-80");
+            if(cancel)QTest::keyClick(&window,Qt::Key_Escape);
+            QTRY_VERIFY_WITH_TIMEOUT(!window.busy(),10000);
+            if(cancel){
+                QVERIFY(window.status().contains("cancelled"));QFile file(source.path()+"/large.bin");QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),payload);
+            }else{
+                QFile file(target);QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),payload);QVERIFY(!QFileInfo::exists(source.path()));
+            }
+        }
+    }
     void graftSessionReparentsLoadedBranches()
     {
         Session session(root);session.apply(scan(root,true),true);session.selectDirectory(panel);session.tags.insert(panel+"/ordenes.php");
@@ -4355,6 +4402,28 @@ while True:
         QVERIFY(session.spell("usua"));
         QCOMPARE(session.currentFile()->name, QString("usuarios.php"));
         QVERIFY(!session.spell("no-existe"));
+    }
+    void heldShiftIncrementalSpell()
+    {
+        const QString base=root+"/spell-fixture";
+        for(const auto &name:{"aejemplo","avenida","avion","var"})QVERIFY(QDir().mkpath(base+'/'+name));
+        for(const auto &name:{"aejemplo.txt","avenida.txt","avion.txt","var.txt"})write(base+'/'+name);
+        TreeWindow window(base);window.show();QTRY_VERIFY(!window.busy());
+        const auto press=[&](int key,const QString &text){QKeyEvent event(QEvent::KeyPress,key,Qt::ShiftModifier,text);QCoreApplication::sendEvent(&window,&event);};
+        QTest::keyPress(&window,Qt::Key_Shift);
+        press(Qt::Key_A,"A");QCOMPARE(window.session().directory,base+"/aejemplo");
+        press(Qt::Key_V,"V");QCOMPARE(window.session().directory,base+"/avenida");QCOMPARE(window.session().treeSpell,QString("AV"));
+        press(Qt::Key_Z,"Z");QCOMPARE(window.session().directory,base+"/avenida");QCOMPARE(window.session().treeSpell,QString("AVZ"));
+        press(Qt::Key_Backspace,{});press(Qt::Key_I,"I");QCOMPARE(window.session().directory,base+"/avion");
+        press(Qt::Key_Escape,{});press(Qt::Key_V,"V");QCOMPARE(window.session().directory,base+"/var");
+        QTest::keyRelease(&window,Qt::Key_Shift);QTest::keyClick(&window,Qt::Key_Home);
+        press(Qt::Key_A,"A");press(Qt::Key_V,"V");
+        QKeyEvent next(QEvent::KeyPress,Qt::Key_QuoteDbl,Qt::NoModifier,"\"");QCoreApplication::sendEvent(&window,&next);
+        QCOMPARE(window.session().directory,base+"/avion");
+        QTest::keyClick(&window,Qt::Key_Home);press(Qt::Key_V,"V");QCOMPARE(window.session().directory,base+"/var");
+        QTest::keyClick(&window,Qt::Key_Home);QTest::keyClick(&window,Qt::Key_Return);
+        QCOMPARE(window.session().view,View::Directory);press(Qt::Key_A,"A");press(Qt::Key_V,"V");
+        QCOMPARE(window.session().currentFile()->name,QString("avenida.txt"));QCOMPARE(window.session().fileSpell,QString("AV"));
     }
     void keyboardFlowAndOpenSignal()
     {

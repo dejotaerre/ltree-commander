@@ -96,6 +96,9 @@ private:
     QFutureWatcher<GraftResult> graftWatcher_;
     QFutureWatcher<ScanResult> graftBrowseWatcher_;
     QTimer graftTimer_;
+    std::shared_ptr<GraftProgress> graftProgress_;
+    QElapsedTimer graftElapsed_;
+    QString graftDestination_;
     void connectGraft();
     void beginGraft();
     void graftKey(QKeyEvent *);

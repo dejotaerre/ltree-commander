@@ -87,6 +87,7 @@ class TerminalUI {
     bool help_ = false, location_ = false, viewer_ = false, hex_ = false, quit_ = false;
     bool sizes_ = false, colors_ = false, parentLoad_ = false, preserveTags_ = true;
     bool startupTreeLoad_ = false;
+    bool activeSpell_ = false;
     Work work_ = Work::None;
     Cancellation cancel_;
     Future<ScanResult> scan_;
@@ -360,10 +361,10 @@ class TerminalUI {
             text(0, rows_ - 1, String("HEX EDIT %1  Offset %2  %3").arg(asciiEdit_ ? "ASCII" : "HEX").arg(editOffset_ + editCursor_, 8, 16, Char('0')).arg(editPage_ == viewed_.bytes.mid(editOffset_, editPage_.size()) ? "Unchanged" : "Modified"));
         }
     }
-    void draw()
+    void draw(bool present = true)
     {
-        getmaxyx(stdscr, rows_, columns_);werase(stdscr);curs_set(0);
-        if (rows_ < 12 || columns_ < 40) { text(0, 0, "Resize to at least 40 x 12. Q quits.");wrefresh(stdscr);return; }
+        getmaxyx(stdscr, rows_, columns_);werase(stdscr);
+        if (rows_ < 12 || columns_ < 40) { text(0, 0, "Resize to at least 40 x 12. Q quits.");if(present){curs_set(0);wrefresh(stdscr);}return; }
         if (help_) {
             drawHelp();
         } else if (viewer_) drawViewer();
@@ -414,11 +415,15 @@ class TerminalUI {
             const int visible = std::max(1, columns_ - int(label.size()) - 1), start = std::max(0, cursor_ - visible + 1);
             if (!status_.isEmpty()) { fill(0, rows_ - 2, columns_, 1);text(0, rows_ - 2, status_); }
             fill(0, rows_ - 1, columns_, 2);text(0, rows_ - 1, label + input_.mid(start), 2);
-            wmove(stdscr, rows_ - 1, int(label.size()) + cursor_ - start);curs_set(2);
+            wmove(stdscr, rows_ - 1, int(label.size()) + cursor_ - start);
         } else if (!help_ && !status_.isEmpty()) { fill(0, rows_ - 1, columns_, 1);text(0, rows_ - 1, status_, 1); }
         else if (!help_ && autoview_ && listWidth() == width()) text(0, rows_ - 1, "Autoview needs a wider panel", 1);
         else if (!viewer_ && !help_) text(0, rows_ - 1, String("LTree Commander %1  Files %2  Tagged %3  %4").arg(TerminalApplication::applicationVersion()).arg(active_.session.files().size()).arg(active_.session.tags.size()).arg(DateTime::currentDateTime().toString("HH:mm:ss")), 1);
-        wrefresh(stdscr);
+        if (present) {
+            const bool inputCursor = work_ == Work::None && prompt_ != Prompt::None && prompt_ != Prompt::MetadataReview;
+            curs_set(inputCursor ? 2 : 0);
+            wrefresh(stdscr);
+        }
     }
     void stopAutoview()
     {
@@ -679,7 +684,7 @@ class TerminalUI {
             commands(0, rows_ - 1, "[Enter] Review [Esc] Cancel [F2] Now [F4] " + StringList{"Written", "Accessed", "Both"}[int(stampField_)] +
                 " [F5] Mode [Tab] Current [F3/↑] Last");
         } else commands(0, rows_ - 1, String("[Enter] ") + (!metadataTagged_ && target.regular ? "Apply" : "Review") + " [Esc] Cancel  Examples: 755, u+w, go-w");
-        wmove(stdscr, rows_ - 2, int(label.size()) + cursor_ - first);curs_set(2);
+        wmove(stdscr, rows_ - 2, int(label.size()) + cursor_ - first);
     }
     void reviewMetadata()
     {

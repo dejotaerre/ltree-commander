@@ -116,7 +116,7 @@ std::optional<String> historyPopup(const String &key, const String &draft) {
       sort = 0;
   String notice;
   while (!stopped) {
-    draw();
+    draw(false);
     const int x = std::max(1, columns_ / 6), w = columns_ - x - 1,
               h = std::max(1, rows_ - 8);
     StringList items;
@@ -165,6 +165,7 @@ std::optional<String> historyPopup(const String &key, const String &draft) {
                                 .arg(items.size())
                                 .arg(filter)
                           : notice);
+    curs_set(0);
     wrefresh(stdscr);
     int k = nextKey();
     if (k < 0)
@@ -235,7 +236,7 @@ ask(const String &label, String input = {}, const String &history = {},
   int cursor = input.size();
   bool selected = !input.isEmpty();
   while (!stopped) {
-    draw();
+    draw(false);
     for (int y = rows_ - 3; y < rows_; ++y)
       fill(0, y, columns_, 1);
     text(0, rows_ - 3, label + input, 2);
@@ -358,7 +359,7 @@ ask(const String &label, String input = {}, const String &history = {},
 }
 int choose(const String &title, const StringList &choices, int index = 0) {
   while (!stopped) {
-    draw();
+    draw(false);
     int h = std::max(1, rows_ - 7);
     index = std::clamp(index, 0, std::max(0, int(choices.size()) - 1));
     int top = std::max(0, index - h + 1);
@@ -372,6 +373,7 @@ int choose(const String &title, const StringList &choices, int index = 0) {
     }
     fill(0, rows_ - 2, columns_, 1);
     commands(0, rows_ - 2, "[↑↓] Select [Enter] OK [Esc] Cancel");
+    curs_set(0);
     wrefresh(stdscr);
     int k = nextKey();
     if (k == 27)
@@ -395,11 +397,12 @@ int choose(const String &title, const StringList &choices, int index = 0) {
 }
 bool confirm(const String &question) {
   while (!stopped) {
-    draw();
+    draw(false);
     fill(0, rows_ - 2, columns_, 1);
     text(0, rows_ - 2, question, 2);
     fill(0, rows_ - 1, columns_, 1);
     commands(0, rows_ - 1, "[Y] Yes [N/Esc] No");
+    curs_set(0);
     wrefresh(stdscr);
     int k = nextKey();
     if (k == 'y' || k == 'Y')
@@ -415,7 +418,7 @@ template <class Function> auto task(const String &label, Function function, cons
   auto future =
       runAsync([function, token] { return function(token); });
   while (!future.isFinished()) {
-    draw();
+    draw(false);
     if(progress)progress();
     else{
       fill(0, rows_ - 1, columns_, 1);
@@ -424,6 +427,7 @@ template <class Function> auto task(const String &label, Function function, cons
                    .arg(String("|/-\\")[spinner_++ % 4])
                    .arg(label));
     }
+    curs_set(0);
     wrefresh(stdscr);
     int k = nextKey();
     if (k == 27 || k == 3 || stopped)
