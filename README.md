@@ -12,7 +12,7 @@ LTree Commander brings the directory tree, file tagging, Branch/Showall lists an
 
 This is a working alpha. Many daily file operations are implemented; full ZTree compatibility remains a development goal. See [current capabilities and limitations](docs/ALPHA.md).
 
-[Features](#features) · [Graphical and terminal modes](#graphical-and-terminal-modes) · [Installation and build](#installation-and-build) · [First steps](#first-steps) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Credits and license](#credits-and-license)
+[Features](#features) · [Graphical and terminal modes](#graphical-and-terminal-modes) · [Installation and build](#installation-and-build) · [First steps](#first-steps) · [Commands in action](#commands-in-action) · [Screenshots](#screenshots) · [Documentation](#documentation) · [Credits and license](#credits-and-license)
 
 ## Features
 
@@ -222,6 +222,120 @@ The sidebars and `ltc --version` show the release and a source **build identifie
 ## Screenshots
 
 Screenshots use synthetic project files, sample documents and generated media. Click an image for its full resolution. The gallery below shows both interfaces and the main file workflows.
+
+### Commands in action
+
+These captures show actual command prompts, reviews, viewers and running operations using disposable files. Transfer examples use a controlled delay so progress can be captured; the displayed speeds are demonstration values.
+
+[Search](#search-tagged-files-with-a-regular-expression) · [Copy](#copy-tagged-files-and-follow-progress) · [Move](#move-between-panels-with-directory-paths) · [Permissions and dates](#change-permissions-and-timestamps) · [Rename](#rename-a-tagged-selection-with-a-mask) · [Compare](#compare-files-and-directory-contents) · [Graft](#graft-a-complete-branch) · [Prune](#prune-a-branch-deliberately) · [Archives](#choose-an-archive-format-and-extract-members) · [Terminal commands](#run-the-same-commands-in-a-terminal)
+
+#### Search tagged files with a regular expression
+
+**Ctrl+T → Ctrl+S → F4** selects a Regex search across tagged files. The example finds complete order identifiers with `^ORDER_[0-9]+$`. Open a result with **V** and use **Space** to continue through matches.
+
+![Regex search prompt across tagged files in split mode](docs/screenshots/command-regex-prompt-19db0814db.png)
+
+![Viewer retaining the batch regular expression and highlighting the next match](docs/screenshots/command-regex-viewer-1c3aad1955.png)
+
+#### Copy tagged files and follow progress
+
+**Ctrl+C** copies the tagged files and offers an editable filename mask. The second capture shows **C** copying a file with bytes written, percentage, speed and cancellation available.
+
+![Copy tagged files with an editable destination filename mask](docs/screenshots/command-copy-mask-15719f04df.png)
+
+![File copy in progress with percentage, byte count, speed and elapsed and remaining time](docs/screenshots/command-copy-progress-aa24c7d473.png)
+
+#### Move between panels with directory paths
+
+**Alt+M** moves tagged files with path options; the destination can come from the opposite panel. The progress example shows the copy phase of a move between filesystems.
+
+![Move destination prefilled from the opposite panel](docs/screenshots/command-move-destination-400dfc034a.png)
+
+![Move between filesystems showing transfer progress](docs/screenshots/command-move-progress-6ddfd65593.png)
+
+#### Change permissions and timestamps
+
+**Ctrl+A** reviews a permission expression for tagged files; this example uses `go-r`. **Ctrl+N** sets timestamps for the tagged files in the current list, with Written/Accessed/Both and Set/Adjust/Increment options.
+
+![Review a POSIX permission change for tagged files](docs/screenshots/command-permissions-40f2e3506f.png)
+
+![Stamp command for setting the dates and times of tagged files](docs/screenshots/command-timestamps-f122b1be83.png)
+
+#### Rename a tagged selection with a mask
+
+**Ctrl+R** prepares a batch rename. Here `*.bak` changes the selected `.txt` filenames while preserving their directory locations; the review appears before applying the changes.
+
+![Batch rename review changing tagged text files to bak filenames](docs/screenshots/command-rename-mask-ed78bd6fe5.png)
+
+#### Compare files and directory contents
+
+**J** compares files and highlights different blocks. **C** in the directory tree opens directory comparison options for unique files, timestamps, size and binary content.
+
+![Text comparison showing changed lines in two files](docs/screenshots/command-compare-files-267a0f1df6.png)
+
+![Directory comparison options for unique files dates sizes and binary content](docs/screenshots/command-compare-directory-f887e63041.png)
+
+#### Create a directory
+
+**M** in the tree creates a directory. The name can contain nested components, such as `docs/sub`; **F4** controls whether to jump to the new location.
+
+![Make directory prompt with a nested docs sub path](docs/screenshots/command-make-directory-3d5796ff5d.png)
+
+#### Graft a complete branch
+
+**Alt+G** moves a directory branch to the selected destination. The first capture shows destination selection between panels; the second shows the current file and byte progress while moving a branch between filesystems.
+
+![Graft branch prompt with the opposite panel as destination](docs/screenshots/command-graft-destination-e091b1049a.png)
+
+![Graft branch transfer showing the current file percentage byte count speed and remaining time](docs/screenshots/command-graft-progress-acf172f7bf.png)
+
+#### Prune a branch deliberately
+
+**Alt+P** exposes the keep-current-files, only-empty, force-read-only and trash options. The command requires entering **PRUNE** before it can proceed.
+
+![Prune branch confirmation with keep files trash empty directories and read only options](docs/screenshots/command-prune-369a83d7c6.png)
+
+#### Choose a sort order and reuse Filespec history
+
+**Alt+S** selects sorting by name, extension, date, time, size and other supported criteria. **F**, then **Up**, opens the saved Filespec history without discarding the panel state.
+
+![Sort command chooser for filenames extensions dates sizes and other criteria](docs/screenshots/command-sort-1b8d6fc344.png)
+
+![Filespec history popup over independent split file panels](docs/screenshots/command-filespec-history-ea89dbda26.png)
+
+#### Choose an archive format and extract members
+
+**F5** creates an archive; **F3** in that prompt opens the format picker. After opening a ZIP with **Enter**, tag members and use **Alt+C** to extract them with directory paths.
+
+![Archive creation picker showing ZIP TAR compressed TAR 7Z GZ BZ2 and XZ](docs/screenshots/command-archive-formats-16e3c32468.png)
+
+![Extraction destination prompt for tagged ZIP members](docs/screenshots/command-archive-extraction-ef89c7d655.png)
+
+#### Use alternate viewer commands and file information
+
+The viewer has normal, Ctrl and Alt command menus; **F10** cycles them. **Alt+I** in the file list shows metadata such as permissions, timestamps, owner, links and inode.
+
+![Viewer Alt command menu with shell bookmarks colors and tagged file navigation](docs/screenshots/command-viewer-alt-menu-994bbbec82.png)
+
+![File information overlay with timestamps permissions owner group and inode](docs/screenshots/command-file-information-d468304942.png)
+
+#### Open a shell in the selected directory
+
+**X** opens the graphical embedded shell in the current directory. The example runs `pwd` and `ls` against the disposable demonstration files.
+
+![Embedded shell opened in the selected directory with pwd and file listing output](docs/screenshots/command-shell-6c294df076.png)
+
+#### Run the same commands in a terminal
+
+A real `ltc --terminal` session below shows the **F4 Ctrl menu**, a **Regex search**, the **A permissions prompt** and a **copy destination**. These commands remain available without a graphical server or a particular terminal emulator.
+
+![Terminal Ctrl file command menu accessed through F4](docs/screenshots/command-terminal-ctrl-menu-97ab3bfb17.png)
+
+![Regex search across tagged files in the terminal interface](docs/screenshots/command-terminal-regex-d71207657e.png)
+
+![Terminal permissions prompt with the 0644 mode entered](docs/screenshots/command-terminal-permissions-d857b13c30.png)
+
+![Terminal copy destination entry for the tagged search results](docs/screenshots/command-terminal-copy-b5d1eb0bd0.png)
 
 ### Directory tree, branch sizes and file statistics
 
