@@ -6,9 +6,9 @@ LTree Commander brings the directory tree, file tagging, Branch/Showall lists an
 
 **Executable:** `ltc` · **Version:** `0.1.0-alpha.1` · **License:** [GPL-3.0-or-later](LICENSE) · **Interfaces:** graphical and terminal
 
-![LTree Commander with a Branch file list and an independent directory tree](docs/screenshots/split.png)
+![LTree Commander displaying an image beside its file list with graphical F7 Autoview](docs/screenshots/autoview-image.png)
 
-*Two independent panels: files collected from a branch on the left, directory navigation and files on the right. All screenshots show the actual program with synthetic example files.*
+*Graphical F7 Autoview displays the selected image beside the file list. Terminal mode retains text and hexadecimal previews. All screenshots show the actual program with synthetic example files.*
 
 This is a working alpha. Many daily file operations are implemented; full ZTree compatibility remains a development goal. See [current capabilities and limitations](docs/ALPHA.md).
 
@@ -221,28 +221,23 @@ The sidebars and `ltc --version` show the release and a source **build identifie
 
 ## Screenshots
 
-Screenshots use synthetic project files, sample documents and generated media. Click an image for its full resolution. Expand the sections to explore each workflow.
+Screenshots use synthetic project files, sample documents and generated media. Click an image for its full resolution. The gallery below shows both interfaces and the main file workflows.
 
-<details>
-<summary><strong>Directory tree, branch sizes and file statistics</strong></summary>
+### Directory tree, branch sizes and file statistics
 
-![Directory tree with logged branch sizes, POSIX permissions and file statistics](docs/screenshots/tree.png)
+![Directory tree with logged branch sizes, POSIX permissions and file statistics](docs/screenshots/tree-045126f8ef.png)
 
 The tree and file list share a panel; logged sizes and statistics remain visible beside it.
 
-</details>
 
-<details>
-<summary><strong>F7 image preview</strong></summary>
+### Split panels and Branch file list
 
-![PNG image displayed beside the file list in graphical Autoview](docs/screenshots/autoview-image.png)
+![Branch file list beside an independent directory tree](docs/screenshots/split-7435a964f3.png)
 
-The selected image is fitted to the preview panel. Zoom, pan and raw/hex access remain available.
+Collect files from a branch on one side while navigating directories and their files on the other. Each panel retains its own location and selection.
 
-</details>
 
-<details>
-<summary><strong>PDF and DOCX document previews</strong></summary>
+### PDF and DOCX document previews
 
 ![PDF page displayed inside graphical Autoview](docs/screenshots/autoview-pdf.png)
 
@@ -252,28 +247,22 @@ PDF pages are rendered with Poppler.
 
 Office documents are converted through a temporary, isolated LibreOffice profile.
 
-</details>
 
-<details>
-<summary><strong>Font specimens and glyph pages</strong></summary>
+### Font specimens and glyph pages
 
 ![TrueType font specimen with sample text and multiple character sizes](docs/screenshots/autoview-font.png)
 
 Inspect fonts without installing them. Page through the specimen and Unicode glyph grid.
 
-</details>
 
-<details>
-<summary><strong>Video thumbnail from the shared desktop cache</strong></summary>
+### Video thumbnail from the shared desktop cache
 
 ![Generated sample video displayed as a cached desktop thumbnail](docs/screenshots/autoview-video.png)
 
 The test-pattern video and its thumbnail are synthetic. The preview identifies its source as the shared desktop cache and keeps the frame fixed.
 
-</details>
 
-<details>
-<summary><strong>Terminal navigation and raw hexadecimal Autoview</strong></summary>
+### Terminal navigation and raw hexadecimal Autoview
 
 ![Actual ncurses interface with directory tree, file attributes and statistics](docs/screenshots/terminal.png)
 
@@ -283,10 +272,8 @@ The terminal interface supports local consoles and SSH sessions without a graphi
 
 The PNG shown visually above is displayed here as its original bytes. This behavior is the same in Kitty and ordinary terminals.
 
-</details>
 
-<details>
-<summary><strong>Regular expression search, ZIP browsing and hexadecimal editing</strong></summary>
+### Regular expression search, ZIP browsing and hexadecimal editing
 
 ![Text viewer with a regular expression and highlighted match](docs/screenshots/regex-viewer.png)
 
@@ -300,16 +287,13 @@ Browse and extract archive members with the familiar file-list workflow.
 
 The internal editor replaces existing bytes and confirms writes.
 
-</details>
 
-<details>
-<summary><strong>Contextual F1 manual</strong></summary>
+### Contextual F1 manual
 
 ![Navigable F1 help with a main-display diagram](docs/screenshots/help.png)
 
 The manual covers the display, keys and command workflows inside the application.
 
-</details>
 
 ## Current limitations
 
