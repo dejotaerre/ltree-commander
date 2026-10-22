@@ -29,8 +29,21 @@ endif()
 
 add_library(ltree_core src/core/helpdocument.cpp src/core/session.cpp src/core/filespec.cpp src/core/sort.cpp src/fs/scanner.cpp src/fs/fileattributes.cpp src/fs/search.cpp src/fs/mounts.cpp src/fs/viewdocument.cpp src/fs/hexedit.cpp src/fs/archive.cpp src/fs/filecompare.cpp src/fs/makedirectory.cpp src/fs/deletedirectory.cpp src/fs/prune.cpp src/fs/graft.cpp src/fs/copyfiles.cpp src/fs/metadata.cpp src/fs/stamp.cpp src/fs/systemstats.cpp src/fs/rename.cpp src/fs/directorycompare.cpp src/fs/symlink.cpp)
 target_include_directories(ltree_core PUBLIC src)
+add_custom_target(ltree-build-identity
+    COMMAND ${CMAKE_COMMAND} "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/build_identity.h"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_identity.cmake"
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/build_identity.h" VERBATIM)
+add_dependencies(ltree_core ltree-build-identity)
+target_sources(ltree_core PRIVATE src/core/buildinfo.cpp)
+target_include_directories(ltree_core PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(ltree_core PUBLIC LibArchive::LibArchive)
 if(LTREE_BUILD_GUI)
+    find_package(Freetype REQUIRED)
+    find_package(PNG REQUIRED)
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    target_sources(ltree_core PRIVATE src/fs/preview.cpp src/fs/fontpreview.cpp src/fs/thumbnail.cpp)
+    target_link_libraries(ltree_core PUBLIC Freetype::Freetype PNG::PNG OpenSSL::Crypto)
     target_link_libraries(ltree_core PUBLIC Qt6::Core Qt6::Concurrent)
     target_compile_definitions(ltree_core PUBLIC LTREE_USE_QT)
 else()
@@ -41,6 +54,7 @@ target_compile_definitions(ltree_core PUBLIC LTREE_VERSION=\"${PROJECT_VERSION}-
 
 if(LTREE_BUILD_GUI)
     add_library(ltree_ui src/ui/windowgeometry.cpp src/ui/helpview.cpp src/ui/treewindow.cpp src/ui/treewindowarchive.cpp src/ui/treewindowdir.cpp src/ui/treewindowprune.cpp src/ui/treewindowgraft.cpp src/ui/treewindowcopy.cpp src/ui/treewindowmetadata.cpp src/ui/treewindowstamp.cpp src/ui/treewindowhistory.cpp src/ui/treewindowstats.cpp src/ui/treewindowrename.cpp src/ui/treewindowdirectorycompare.cpp src/ui/consolefont.cpp src/ui/fileviewer.cpp src/ui/fileviewercommands.cpp src/ui/archivewindow.cpp src/ui/comparewindow.cpp src/ui/executewindow.cpp)
+    target_sources(ltree_ui PRIVATE src/ui/visualpreview.cpp)
     target_link_libraries(ltree_ui PUBLIC ltree_core Qt6::Widgets Qt6::Concurrent Qt6::PrintSupport qtermwidget6)
     target_compile_options(ltree_ui PRIVATE -Wall -Wextra -Wpedantic)
 
@@ -124,6 +138,10 @@ if(BUILD_TESTING)
     endif()
     if(LTREE_BUILD_GUI)
         find_package(Qt6 REQUIRED COMPONENTS Test)
+        add_executable(ltree-preview-tests tests/test_preview.cpp)
+        target_link_libraries(ltree-preview-tests PRIVATE ltree_ui Qt6::Test)
+        add_test(NAME ltree-preview-tests COMMAND ltree-preview-tests)
+        set_tests_properties(ltree-preview-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
         add_executable(ltree-file-attributes-tests tests/test_file_attributes.cpp)
         target_link_libraries(ltree-file-attributes-tests PRIVATE ltree_core Qt6::Test)
         target_link_options(ltree-file-attributes-tests PRIVATE "-Wl,--wrap=lgetxattr")
@@ -138,7 +156,7 @@ if(BUILD_TESTING)
             target_link_libraries(ltree-terminal-editor-tests PRIVATE ltree_terminal Qt6::Test)
             add_test(NAME ltree-terminal-editor-tests COMMAND ltree-terminal-editor-tests)
         endif()
-        foreach(suite terminal_pty terminal_extended_pty terminal_operations_pty terminal_kitty_pty)
+        foreach(suite terminal_pty terminal_extended_pty terminal_operations_pty terminal_kitty_pty terminal_media_pty)
             add_test(NAME ltree-${suite} COMMAND ${CMAKE_COMMAND} -E env
                 "LTC_TEST_BINARY=$<TARGET_FILE:ltc>" "LTREE_PTY_WORK=" "LTC_TEST_HAS_GUI=$<BOOL:${LTREE_BUILD_GUI}>"
                 ${LTREE_TEST_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/tests/${suite}.py)

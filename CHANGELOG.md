@@ -1,5 +1,15 @@
 # Changelog
 
+## Visual Autoview and build identity — 2026-10-21
+
+- Add graphical F7 previews for images, PDF pages, Office documents, fonts and video thumbnails, with zoom, pan and raw text/hex access. Read selected files in the background and discard obsolete selections.
+- Convert Office documents through an isolated temporary LibreOffice profile with macros disabled. Import DOCX explicitly through the Word Open XML filter, including TextMaker documents, and use the virtual display backend to avoid hidden desktop dialogs.
+- Render font specimens and Unicode glyph grids with FreeType and a native uncompressed PFF2 reader, without installing or modifying the font files.
+- Reuse validated shared desktop video thumbnails before invoking FFmpeg, and adopt thumbnails created after opening the preview. Use a fixed video thumbnail with no frame navigation; only a cache miss requires video probing and decoding.
+- Keep terminal Autoview exclusively in original text and hexadecimal bytes for every file type, including when running in Kitty. Do not use graphical protocols, thumbnail caches or visual conversion helpers in terminal mode. Terminal-only builds do not require Qt, FreeType, libpng or OpenSSL for previews.
+- Replace the fixed version label with the full release version and a source build identifier in both sidebars and `ltc --version`.
+- Show logged tree sizes by default in both interfaces; retain `--tree-sizes` and add `--no-tree-sizes` to hide them.
+
 ## License update — 2026-10-06
 
 - License the current original code, documentation and project-created assets under GNU GPL version 3 or later (`GPL-3.0-or-later`). Replace LICENSE with the complete GPLv3 text and update the README, alpha status and dependency notices.

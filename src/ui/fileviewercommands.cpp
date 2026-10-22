@@ -82,7 +82,7 @@ void FileViewer::setFiles(const QStringList &paths)
 }
 void FileViewer::setAutoview(bool enabled)
 {
-    autoview_=enabled;if(enabled && archiveName(path_) && !rawArchive_){rawArchive_=true;if(loading_){pendingPath_=true;cancel_->store(true);}else reload();}update();
+    autoview_=enabled;if(updateVisual()){update();return;}if(enabled && archiveName(path_) && !rawArchive_){rawArchive_=true;if(loading_){pendingPath_=true;cancel_->store(true);}else reload();}update();
 }
 void FileViewer::navigateFile(int index,bool continueSearch)
 {

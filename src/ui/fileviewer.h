@@ -9,12 +9,13 @@
 #include "ui/consolefont.h"
 #include <QFutureWatcher>
 #include <QWidget>
+#include "ui/visualpreview.h"
 
 namespace ltree {
 class FileViewer : public QWidget {
     Q_OBJECT
 public:
-    explicit FileViewer(QString path, QWidget *parent = nullptr);
+    explicit FileViewer(QString path, QWidget *parent = nullptr, bool autoview = false);
     ~FileViewer() override;
     void setPath(const QString &path);
     void reload();
@@ -32,7 +33,7 @@ public:
     bool lineMode() const { return lineMode_; }
     int tabWidth() const { return tabWidth_; }
     void handleKey(QKeyEvent *event) { keyPressEvent(event); }
-    bool loading() const { return loading_; }
+    bool loading() const { return visualActive() ? visual_->busy() : loading_; }
     QString status() const { return status_; }
     void showStatus(const QString &status) { status_=status;update(); }
     qsizetype currentRow() const { return top_; }
@@ -55,6 +56,10 @@ protected:
     void focusOutEvent(QFocusEvent *) override;
     bool focusNextPrevChild(bool) override { return false; }
 private:
+    VisualPreview *visual_ = nullptr;
+    bool visualRaw_ = false;
+    bool visualActive() const { return visual_ && autoview_ && !visualRaw_ && previewKind(path_) != PreviewKind::None; }
+    bool updateVisual();
     HelpDocument helpDocument_;
     QString path_, status_, input_, query_;
     std::optional<SearchOptions> batchSearch_;

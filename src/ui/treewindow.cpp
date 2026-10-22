@@ -1,4 +1,5 @@
 #include "ui/windowgeometry.h"
+#include "core/buildinfo.h"
 #include "ui/theme.h"
 #include "ui/treewindow.h"
 
@@ -519,7 +520,8 @@ void TreeWindow::drawStats(QPainter &p)
         drawText(p, x, 21, tree ? QFileInfo(session_.directory).fileName() :
                      session_.currentFile() ? session_.currentFile()->name : "", yellow, w);
     }
-    drawText(p, x, bottom() - 1, "LTree 0.1 alpha", cyan, w);
+    drawText(p, x, bottom() - 2, "LTC " LTREE_VERSION, cyan, w);
+    drawText(p, x, bottom() - 1, "Build " + buildId(), cyan, w);
 }
 
 void TreeWindow::drawHelp(QPainter &p)
@@ -1235,7 +1237,7 @@ void TreeWindow::startAutoview()
     autoviewReturn_ = session_.view;
     if (session_.view == View::Tree) session_.enter(View::Directory);
     if (!session_.currentFile()) { status_ = "No files for Autoview"; return; }
-    preview_ = new FileViewer(session_.currentFile()->path, this);
+    preview_ = new FileViewer(session_.currentFile()->path, this, true);
     preview_->setObjectName("autoview");
     preview_->setAutoview(true);
     preview_->setFocusPolicy(Qt::NoFocus);

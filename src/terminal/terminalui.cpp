@@ -6,6 +6,7 @@
 #include "core/helpdocument.h"
 #include "fs/mounts.h"
 #include "fs/viewdocument.h"
+#include "core/buildinfo.h"
 #include "fs/hexedit.h"
 #include "fs/stamp.h"
 #include "fs/copyfiles.h"
@@ -418,7 +419,7 @@ class TerminalUI {
             wmove(stdscr, rows_ - 1, int(label.size()) + cursor_ - start);
         } else if (!help_ && !status_.isEmpty()) { fill(0, rows_ - 1, columns_, 1);text(0, rows_ - 1, status_, 1); }
         else if (!help_ && autoview_ && listWidth() == width()) text(0, rows_ - 1, "Autoview needs a wider panel", 1);
-        else if (!viewer_ && !help_) text(0, rows_ - 1, String("LTree Commander %1  Files %2  Tagged %3  %4").arg(TerminalApplication::applicationVersion()).arg(active_.session.files().size()).arg(active_.session.tags.size()).arg(DateTime::currentDateTime().toString("HH:mm:ss")), 1);
+        else if (!viewer_ && !help_) text(0, rows_ - 1, String("LTree Commander %1  Files %2  Tagged %3  %4").arg(String(LTREE_VERSION)).arg(active_.session.files().size()).arg(active_.session.tags.size()).arg(DateTime::currentDateTime().toString("HH:mm:ss")), 1);
         if (present) {
             const bool inputCursor = work_ == Work::None && prompt_ != Prompt::None && prompt_ != Prompt::MetadataReview;
             curs_set(inputCursor ? 2 : 0);
@@ -877,7 +878,7 @@ class TerminalUI {
             if (!alt && value == KEY_SF) { menu_ = 0;++previewTop_;return; }
             if (!alt && value == KEY_SPREVIOUS) { menu_ = 0;previewTop_ -= page;return; }
             if (!alt && value == KEY_SNEXT) { menu_ = 0;previewTop_ += page;return; }
-            if (!alt && value == KEY_SHOME) { menu_ = 0;previewTop_ = 0;return; }
+            if (!alt && (value == KEY_SHOME || value == 0x2403)) { menu_ = 0;previewTop_ = 0;return; }
             if (!alt && value == KEY_SEND) { menu_ = 0;previewTop_ = std::max(0, count - page);return; }
             if (alt && (value == KEY_LEFT || value == KEY_RIGHT || value == KEY_HOME)) {
                 menu_ = 0;autoviewPercent_ = value == KEY_HOME ? 40 : std::clamp(autoviewPercent_ + (value == KEY_RIGHT ? 5 : -5), 20, 75);return;

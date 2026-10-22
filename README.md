@@ -10,6 +10,8 @@ This is an independent implementation, with no affiliation with or endorsement b
 
 **Version: 0.1.0-alpha.1 · executable: `ltc` · license: [GPL-3.0-or-later](LICENSE).** This is a working alpha, with substantial features still to implement before full compatibility. See [alpha status](docs/ALPHA.md).
 
+The statistics panel in both interfaces and `ltc --version` show the full version and a **build identifier** derived from the source contents. The release version changes for releases; the build identifier changes when the code changes, including local changes before a commit.
+
 ## Development and contributors
 
 LTree Commander is developed through collaboration between **[Hector De Armas (dejotaerre)](https://github.com/dejotaerre)** and **[OpenAI Codex](https://developers.openai.com/codex/)**, an AI coding assistant.
@@ -51,12 +53,17 @@ All screenshots show LTree Commander itself with synthetic example files.
 
 ## What works in this alpha
 
+Optional visual preview helpers: **Poppler** (`pdfinfo`, `pdftoppm`) for PDF and **LibreOffice** for Office documents. Graphical images use Qt's installed image plugins. These visual previews belong to the graphical interface. Terminal mode always shows raw text or hexadecimal bytes; see [terminal mode](docs/TERMINAL.md). For Debian graphical previews: `sudo apt install poppler-utils libreoffice`. These helpers are not required for normal text/hex preview or a terminal-only build.
+
+**Video previews** first reuse valid thumbnails from the shared desktop cache (`$XDG_CACHE_HOME/thumbnails`, normally `~/.cache/thumbnails`), as used by Nautilus. URI, modification time and file size (when present) are checked. Cached previews need no FFmpeg process or video decoding; they are labelled **Desktop thumbnail**, since their timestamp is unknown. A cache miss uses **FFmpeg** (`ffmpeg` and `ffprobe`; Debian: `sudo apt install ffmpeg`). F7 shows a still frame, duration, resolution and video codec for MKV, MP4, AVI, WebM, MOV and other common video extensions. The video preview is a fixed thumbnail; paging keys and the mouse wheel do not seek through the video. The graphical interface provides zoom, pan and raw/hex fallback; terminal mode reads only the original bytes. Previews read the selected frame in the background; they do not play the video automatically.
+
 - Directory trees, recursive branch logging, Branch/Showall/Global lists, file tags, Filespec filters and sorting.
-- Two independent panels with **F8**, **F7 Autoview**, optional branch sizes and automatic destination refresh after transfers.
+- Two independent panels with **F8**, **F7 Autoview**, branch sizes shown by default (`--no-tree-sizes` hides them) and automatic destination refresh after transfers.
 - Individual and tagged copy/move/delete/rename operations, filename masks and copy with directory structure.
 - **Prune**, **Graft**, directory creation, symbolic links, POSIX permissions and access/modification timestamps.
 - Text, Hex and Unicode searches, optional **regular expressions**, progress/spinner/hit count and persistent search/Filespec histories.
 - A text/Hex viewer with search handoff from tagged files, **Space** for the next match, viewer commands and confirmed byte overwrite editing.
+- Graphical **F7 Autoview** displays images, PDF pages and Office documents (DOCX/DOC/ODT/RTF, XLSX/XLS/ODS, PPTX/PPT/ODP). Office documents are converted to temporary PDF pages using a separate LibreOffice profile, with macros disabled. Originals remain unchanged. **Shift+PgUp/PgDn** changes pages; **Shift+F12** switches visual/raw preview, and **Shift+H** opens the hexadecimal view. Inside the graphical preview, the mouse wheel changes pages and Ctrl+wheel zooms.
 - Text/binary file comparison and directory/branch comparison.
 - Archive browsing, member search, extraction and creation of **ZIP, TAR, TAR.GZ, TAR.BZ2, TAR.XZ and 7Z**; single-file **GZ, BZ2 and XZ** output.
 - Integrated shell through **X**, external editor integration, contextual **F1** help, single-instance graphical activation and saved window size/state.
@@ -74,7 +81,7 @@ Install the build dependencies on an up-to-date Arch Linux / CachyOS system:
 
 ```bash
 sudo pacman -Syu --needed gcc cmake ninja git qt6-base qtermwidget \
-  libarchive python-fonttools kbd gzip pkgconf ncurses bash coreutils diffutils
+  libarchive freetype2 libpng openssl python-fonttools kbd gzip pkgconf ncurses bash coreutils diffutils
 ```
 
 Check Qt and the font tools, then build both graphical and terminal interfaces:
@@ -118,6 +125,8 @@ cmake --build build-terminal -j 4
 This uses C++/POSIX, ICU for Unicode, PCRE2 for regular expressions, nlohmann JSON for histories, libarchive and ncursesw. It does not find, compile or link Qt or QTermWidget. The same file-operation engines and terminal commands are retained. See the [build guide](docs/BUILD.md#build-only-the-terminal-interface) for Arch packages and tests.
 
 Tests are disabled in the quick starts. Enable them with `-DBUILD_TESTING=ON`; terminal tests additionally need Python 3, `zip` and `7z`. Graphical tests also need Qt Test. To omit ncurses from a graphical build, use `-DLTREE_BUILD_TERMINAL=OFF`.
+
+**Font previews** show a text specimen and pages of Unicode characters for TTF, OTF, font collections (first face), WOFF/WOFF2 and supported Type 1/bitmap fonts through FreeType. Uncompressed PF2 fonts have a native PFF2 reader. **Shift+PgUp/PgDn** changes specimen/glyph pages; **Shift+F12** and **Shift+H** retain raw/hex access. Font files are read without installing or changing them. Visual previews work only in the graphical interface; terminal mode shows the original font bytes as text/hex.
 
 ## First steps
 

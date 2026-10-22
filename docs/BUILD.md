@@ -12,6 +12,7 @@ LTree Commander produces one executable, **`ltc`**. The default build includes b
 | QTermWidget for Qt 6 | Graphical build | CMake package `qtermwidget6`; upstream 2.4.0 is tested. A Qt 5 build is insufficient. |
 | ICU, PCRE2-16 and nlohmann JSON development files | Terminal-only build | Unicode, regular expressions and JSON histories; no Qt required. |
 | libarchive development files | All builds | Archive reading, creation and extraction. |
+| FreeType, libpng and OpenSSL Crypto development files | Graphical build | Font previews and validated desktop thumbnail cache. |
 | Python 3 and fontTools | Graphical build | Generate the integrated shell's font. Terminal tests need Python 3, without fontTools. |
 | PSF2 8×16 font with a Unicode table | Graphical build and runtime | See [console font](#console-font). Keep the selected file installed. |
 | pkg-config and ncursesw development files | Terminal backend | Enabled by default; the wide-character library is required. |
@@ -39,7 +40,7 @@ Install build and runtime dependencies:
 
 ```bash
 sudo pacman -Syu --needed gcc cmake ninja git qt6-base qtermwidget \
-  libarchive python-fonttools kbd gzip pkgconf ncurses bash coreutils diffutils
+  libarchive freetype2 libpng openssl python-fonttools kbd gzip pkgconf ncurses bash coreutils diffutils
 ```
 
 Check the installed versions and font before configuring:
@@ -63,7 +64,7 @@ For a graphical build on Debian / Ubuntu, these packages cover the prerequisites
 ```bash
 sudo apt update
 sudo apt install build-essential cmake ninja-build git pkg-config \
-  libarchive-dev libncurses-dev python3 python3-fonttools gzip \
+  libarchive-dev libfreetype-dev libpng-dev libssl-dev libncurses-dev python3 python3-fonttools gzip \
   bash coreutils diffutils curl
 ```
 

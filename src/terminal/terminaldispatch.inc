@@ -337,9 +337,11 @@ void drawSidebar(const Pane &pane, int x, int w) {
   if (s.view == View::Tree)
     text(x, divider(), "┼", 1, 1);
   text(x, end(), "┴", 1, 1);
-  for (int i = 0; i < lines.size() && i + 2 < end(); ++i)
+  for (int i = 0; i < lines.size() && i + 2 < end() - 2; ++i)
     text(x + 1, i + 2, lines[i],
          i == 0 || lines[i].contains("Statistics") ? 1 : 2, w - 2);
+  text(x + 1, end() - 2, "LTC " LTREE_VERSION, 1, w - 2);
+  text(x + 1, end() - 1, "Build " + buildId(), 1, w - 2);
 }
 
 void publishGlobal() {

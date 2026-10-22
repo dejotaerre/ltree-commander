@@ -1,4 +1,5 @@
 #include <QCoreApplication>
+#include "core/buildinfo.h"
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QDir>
@@ -53,7 +54,7 @@ int main(int argc, char **argv)
         QApplication::setWindowIcon(QIcon(":/icons/ltreec.png"));
     }
 #endif
-    QCoreApplication::setApplicationVersion(LTREE_VERSION);
+    QCoreApplication::setApplicationVersion(ltree::versionDescription());
     QCommandLineParser parser;
     parser.setApplicationDescription(terminal ?
         "LTree Commander: terminal file manager for Linux. F1 shows available commands." :
@@ -64,7 +65,8 @@ int main(int argc, char **argv)
     parser.addOption({"terminal", "Force the terminal interface; automatic without a graphical environment."});
     parser.addOption({"fullscreen", "Start in fullscreen mode."});
     parser.addOption({"new-instance", "Allow an additional graphical instance; terminal sessions are independent."});
-    parser.addOption({"tree-sizes", "Show logged branch sizes beside the directory tree."});
+    parser.addOption({"tree-sizes", "Show logged branch sizes (default)."});
+    parser.addOption({"no-tree-sizes", "Hide logged branch sizes beside the directory tree."});
     parser.process(*app);
     if (parser.positionalArguments().size() > 1) parser.showHelp(2);
     const QString root = parser.positionalArguments().isEmpty() ? QDir::currentPath() : parser.positionalArguments().first();
@@ -77,7 +79,7 @@ int main(int argc, char **argv)
     if (terminal) {
         if (parser.isSet("fullscreen")) { std::fprintf(stderr,"--fullscreen applies to the graphical interface.\n");return 2; }
 #ifdef LTREE_HAS_TERMINAL
-        return ltree::runTerminal(canonical, parser.isSet("tree-sizes"), parser.positionalArguments().isEmpty());
+        return ltree::runTerminal(canonical, !parser.isSet("no-tree-sizes"), parser.positionalArguments().isEmpty());
 #else
         std::fprintf(stderr,"This build does not include the terminal interface.\n");return 2;
 #endif
@@ -100,7 +102,7 @@ int main(int argc, char **argv)
             for(int attempt=0;attempt<30;++attempt){
                 socket.connectToServer(runtime+"/ltreec.socket");
                 if(socket.waitForConnected(100)){
-                    socket.write(parser.isSet("tree-sizes")?"activate-tree-sizes\n":"activate\n");socket.waitForBytesWritten(1000);
+                    socket.write(parser.isSet("no-tree-sizes")?"activate-no-tree-sizes\n":"activate-tree-sizes\n");socket.waitForBytesWritten(1000);
                     if(socket.waitForReadyRead(1000)) {
                         const auto reply = socket.readAll();
                         if (reply == "activated\n") {
@@ -127,15 +129,16 @@ int main(int argc, char **argv)
     QObject::connect(app.get(), &QCoreApplication::aboutToQuit, &window, [&window] {
         ltree::saveWindowGeometry(window);
     });
-    window.setTreeSizesVisible(parser.isSet("tree-sizes"));
+    window.setTreeSizesVisible(!parser.isSet("no-tree-sizes"));
     QObject::connect(&instanceServer,&QLocalServer::newConnection,&window,[&]{
         while(auto *socket=instanceServer.nextPendingConnection()){
             QObject::connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
             const auto activate=[socket,&window]{
                 if(!socket->canReadLine())return;
                 const auto command=socket->readLine();
-                if(command=="activate\n" || command=="activate-tree-sizes\n"){
+                if(command=="activate\n" || command=="activate-tree-sizes\n" || command=="activate-no-tree-sizes\n"){
                     if(command=="activate-tree-sizes\n")window.setTreeSizesVisible(true);
+                    if(command=="activate-no-tree-sizes\n")window.setTreeSizesVisible(false);
                     if(window.isMinimized())window.setWindowState(window.windowState() & ~Qt::WindowMinimized);
                     window.raise();window.activateWindow();
                     socket->write("activated\n");socket->disconnectFromServer();

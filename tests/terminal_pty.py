@@ -18,7 +18,7 @@ class Screen:
    if self.state=='oscesc':self.state='' if ch=='\\' else 'osc';continue
    if self.state=='esc':
     if ch=='[':self.state='csi';self.buf=''
-    elif ch==']':self.state='osc'
+    elif ch in ']_':self.state='osc'
     elif ch in '()':self.state='charset'
     else:self.state=''
     continue
@@ -161,7 +161,8 @@ def parent_row():
   a.send('\r',.4);a.check('Enter logs selected parent','Directory not logged' not in a.screen.text() and 'home' in a.screen.text())
   a.send('\x1b');a.send('\t');a.check('Opposite panel retains initial selection',a.screen.text().splitlines()[0].count(str(a.root))>=1)
   a.send(F8);a.send('l');a.wait('LOCATIONS');a.send('\r',.4)
-  a.check('Filesystem root has no duplicate parent entry',''.join(a.screen.grid[2]).split('│')[1].strip()=='/' and ''.join(a.screen.grid[3]).split('│')[1].strip()!='/')
+  root_name=re.sub(r'\s+[\[{].*[\]}]\s*$','',''.join(a.screen.grid[2]).split('│')[1]).strip()
+  a.check('Filesystem root has no duplicate parent entry',root_name=='/' and ''.join(a.screen.grid[3]).split('│')[1].strip()!='/')
  finally:a.close()
 
 

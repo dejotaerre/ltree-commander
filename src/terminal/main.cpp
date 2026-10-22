@@ -1,4 +1,5 @@
 #include "platform/platform.h"
+#include "core/buildinfo.h"
 #include "terminal/terminalui.h"
 #include <clocale>
 #include <cstdio>
@@ -6,7 +7,7 @@
 
 int main(int argc, char **argv) {
     std::setlocale(LC_MESSAGES, "C");
-    bool sizes = false;
+    bool sizes = true;
     ltree::String directory;
     bool positional = false;
     for (int i = 1; i < argc; ++i) {
@@ -15,13 +16,13 @@ int main(int argc, char **argv) {
             std::puts("Usage: ltc [options] [directory]\n\nLTree Commander: terminal file manager for "
                       "Linux.\n\nOptions:\n  -h, --help       Show this help\n  -v, --version    Show "
                       "version\n  --terminal       Terminal interface (always selected in this build)\n  "
-                      "--tree-sizes     Show logged branch sizes\n  --new-instance   Accepted for "
+                      "--tree-sizes     Show logged branch sizes (default)\n  --no-tree-sizes  Hide logged branch sizes\n  --new-instance   Accepted for "
                       "compatibility; sessions are independent\n\nThe default directory is the current "
                       "working directory. F1 opens the manual.");
             return 0;
         }
         if (!positional && (argument == "--version" || argument == "-v")) {
-            std::puts("ltc " LTREE_VERSION);
+            std::printf("ltc %s\n", ltree::versionDescription().toUtf8().constData());
             return 0;
         }
         if (!positional && argument == "--") {
@@ -32,6 +33,10 @@ int main(int argc, char **argv) {
             continue;
         if (!positional && argument == "--tree-sizes") {
             sizes = true;
+            continue;
+        }
+        if (!positional && argument == "--no-tree-sizes") {
+            sizes = false;
             continue;
         }
         if (!positional && argument == "--fullscreen") {

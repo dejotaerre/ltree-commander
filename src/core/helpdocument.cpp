@@ -410,7 +410,8 @@ The initial folder stays selected inside the filesystem tree, with its ancestors
 
 ltc                         Graphical application when a display is available
 ltc /home/alex             Start at a selected directory
-ltc --tree-sizes             Show logged directory size annotations
+ltc --tree-sizes             Show logged directory sizes (default)
+ltc --no-tree-sizes          Hide logged directory size annotations
 ltc --terminal              Use the terminal interface
 ltc --new-instance          Explicitly allow another instance
 ltc --fullscreen            Start the graphical interface fullscreen
@@ -617,6 +618,12 @@ The common Viewer chapter describes the text commands. The terminal supplies Alp
 
 = AUTOVIEW
 F7 previews the selected file beside the list. Shift+viewer-key operates the preview; Shift+arrows and pages scroll it. Alt+Left/Right/Home changes preview width. F7, Enter or Esc returns to normal lists.
+
+Terminal Autoview always reads the original file as text or hexadecimal bytes. Binary files select Hex automatically; Shift+H / Shift+A switches Hex / Alpha. Images, PDF, Office files, fonts and videos use the same raw viewer as any other file. No image protocol, thumbnail cache or visual conversion program is used in terminal mode.
+
+: Shift+H / Shift+A | Read the original bytes in Hex / Alpha mode.
+: Shift+arrows / PgUp/PgDn | Scroll the raw preview.
+: Alt+Left/Right/Home | Adjust / reset the preview panel width.
 
 = INTERNAL HEX EDITOR
 The editor replaces existing bytes without inserting or removing data. One page is buffered at a time. Files must be regular and accessed through safe paths; symbolic links and archive members cannot be edited internally.

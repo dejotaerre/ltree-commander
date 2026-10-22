@@ -18,7 +18,7 @@ namespace {
 const QColor cyan = theme::labels, yellow = theme::normal;
 
 }
-FileViewer::FileViewer(QString path, QWidget *parent) : QWidget(parent), path_(std::move(path))
+FileViewer::FileViewer(QString path, QWidget *parent, bool autoview) : QWidget(parent), path_(std::move(path)), autoview_(autoview)
 {
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_OpaquePaintEvent);
@@ -27,6 +27,7 @@ FileViewer::FileViewer(QString path, QWidget *parent) : QWidget(parent), path_(s
     if (!consoleFont_.available()) { const QFontMetrics m(mono); cw_ = m.horizontalAdvance('M'); ch_ = m.height(); ascent_ = m.ascent(); }
     connect(&watcher_, &QFutureWatcher<ViewDocument>::finished, this, [this] {
         loading_ = false;
+        if (visualActive()) { pendingPath_=false;return; }
         if (pendingPath_) { reload(); return; }
         auto data = watcher_.result();
         if (data.cancelled) status_ = "Read cancelled";
@@ -50,6 +51,7 @@ void FileViewer::setPath(const QString &path)
     document_ = {}; wrapStarts_.clear(); top_ = left_ = 0; hit_ = -1;
     searchPrompt_ = offsetPrompt_ = false; editing_=savePrompt_=false;gather_=0;lineCursor_=0;bookmarks_.fill(0);rawArchive_=!files_.isEmpty(); input_.clear(); query_.clear(); batchSearch_.reset();
     status_ = "Reading…";
+    if (updateVisual()) { update();return; }
     if (loading_) { pendingPath_ = true; cancel_->store(true); } else reload();
     update();
 }
@@ -65,6 +67,7 @@ void FileViewer::setSearch(const SearchOptions &options)
 }
 void FileViewer::reload()
 {
+    if(updateVisual())return;
     if (loading_) return;
     cancel_ = std::make_shared<std::atomic_bool>(false); loading_ = true; status_ = "Reading… Esc returns to the file list";
     pendingPath_ = false;
@@ -77,6 +80,16 @@ void FileViewer::reload()
         for(const auto &entry:catalog.entries)doc.text+=QString("%1 %2 %3\n").arg(entry.directory?"DIR":"FILE").arg(entry.size,12).arg(entry.path);
         doc.bytes=doc.text.toUtf8();doc.lines.append(0);for(qsizetype i=0;i+1<doc.text.size();++i)if(doc.text[i]=='\n')doc.lines.append(i+1);return doc;
     })); update();
+}
+bool FileViewer::updateVisual()
+{
+    if(!autoview_ || visualRaw_ || previewKind(path_)==PreviewKind::None){
+        if(visual_){visual_->cancel();visual_->hide();}return false;
+    }
+    if(cancel_)cancel_->store(true);
+    if(!visual_)visual_=new VisualPreview(this);
+    visual_->setGeometry(rect());visual_->setPath(path_);visual_->show();visual_->raise();
+    return true;
 }
 qsizetype FileViewer::lineEnd(qsizetype line) const
 {
@@ -220,6 +233,7 @@ void FileViewer::paintEvent(QPaintEvent *)
 }
 void FileViewer::resizeEvent(QResizeEvent *)
 {
+    if(visual_)visual_->setGeometry(rect());
     if (dump_) {
         const auto offset=top_*dumpColumns_;
         dumpColumns_=std::max(1,width()/cw_-10); top_=offset/dumpColumns_;
@@ -320,6 +334,20 @@ void FileViewer::keyPressEvent(QKeyEvent *event)
 {
     const int key=event->key(); const auto mods=event->modifiers();
     if (handleFullscreenKey(*window(), *event)) { menuMode_=0; return; }
+    if(autoview_ && key==Qt::Key_F12){
+        visualRaw_=!visualRaw_;
+        if(!updateVisual()){if(loading_){pendingPath_=true;cancel_->store(true);}else reload();}
+        update();return;
+    }
+    if(visualActive()){
+        if(key==Qt::Key_Escape || key==Qt::Key_Q){emit closed();return;}
+        if(key==Qt::Key_H || key==Qt::Key_A){
+            visualRaw_=true;hex_=key==Qt::Key_H;wrap_=dump_=junk_=false;
+            updateVisual();if(loading_){pendingPath_=true;cancel_->store(true);}else reload();
+        }else if(key==Qt::Key_E)emit editRequested(path_);
+        else visual_->handleKey(key);
+        return;
+    }
     if (loading_) { if(key==Qt::Key_Escape){cancel_->store(true);emit closed();} return; }
     status_.clear();
     if(!prompting() && key==Qt::Key_F10 && !mods.testFlag(Qt::ControlModifier) && !mods.testFlag(Qt::AltModifier)){menuMode_=(menuMode_+1)%3;update();return;}
