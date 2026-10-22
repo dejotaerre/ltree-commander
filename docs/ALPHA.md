@@ -2,7 +2,7 @@
 
 First public source alpha of **LTree Commander**, a native Linux clone aiming to reproduce ZTreeWin / ZTreeBold by ZEDTEK as faithfully as possible. The main behavioral reference is ZTreeWin 2.2.19. Full compatibility remains a development goal.
 
-## Release contents
+## Original source release
 
 - C++20 / Qt 6 graphical file manager, optional ncurses terminal backend, tests, build tools, documentation and project icons.
 - [GNU GPL version 3 or later](../LICENSE) (`GPL-3.0-or-later`) for the original project work; dependencies retain their own terms. See [THIRD_PARTY.md](../THIRD_PARTY.md), particularly QTermWidget's GPL requirements when distributing combined executables.
@@ -28,7 +28,15 @@ The graphical window also remembers its normal size and maximized/fullscreen sta
 - Recursive permission editing, ACL/owner management, tolerance rules and some Windows-specific commands remain incomplete or deliberately adapted to Linux.
 - Archive members are read-only; extract, edit and create a new archive. Encrypted archive creation and in-place archive updates are not implemented. RAR variants and physical printing still need broader testing.
 - GNU diff and mv are required for their respective comparison/Graft paths. Sublime Text and Kitty integration requires the external programs to be installed.
-- Tested on CachyOS x86-64 with Qt 6.11.2, GNOME/Wayland and XWayland. ARM64/Raspberry Pi 5 has not yet been tested.
+- Current development has been built and tested on CachyOS x86-64 and with Debian 12-compatible amd64/arm64 packages, including Raspberry Pi 5. Graphical and terminal sessions are checked separately. The terminal-only build requires no Qt libraries.
+
+## Current previews and version display
+
+Graphical F7 Autoview previews images, PDF and Office documents, font specimens and fixed video thumbnails. It reuses validated shared desktop thumbnails before falling back to FFmpeg. Visual readers are optional helpers; see the [README preview requirements](../README.md#graphical-f7-previews).
+
+Terminal F7 and V always show the original text or hexadecimal bytes, including in Kitty. Terminal mode uses no image protocol, thumbnail cache or visual converter. Graphical previews remain exclusive to the graphical interface.
+
+Logged branch sizes are visible by default (`--no-tree-sizes` hides them). Both sidebars and `ltc --version` identify the release and source build.
 
 ## Validation
 
@@ -50,4 +58,4 @@ Tests use disposable fixtures and isolate the application's histories. Do not po
 
 [README](../README.md) · [Detailed usage](USAGE.md) · [Viewer and archives](VISOR_Y_COMPRIMIDOS.md) · [Implementation notes](IMPLEMENTACION.md) · [Changelog](../CHANGELOG.md)
 
-Terminal: A/Ctrl+A edit POSIX permissions; N/Ctrl+N edit file timestamps with Written/Accessed/Both and Set/Adjust/Increment modes. Both review the change before applying and preserve selection and tags when refreshing both panels. New date history is persistent and shared with the graphical interface. A in the tree is Avail; Alt+A edits directory permissions.
+Terminal: A/Ctrl+A edit POSIX permissions; N/Ctrl+N edit file timestamps with Written/Accessed/Both and Set/Adjust/Increment modes. A in the file list applies the entered mode directly with Enter; Ctrl+A on tagged files and Alt+A on directories retain confirmation. Timestamp changes retain their review. Both operations preserve selection and tags when refreshing affected panels. New date history is persistent and shared with the graphical interface. A in the tree is Avail; Alt+A edits directory permissions.
